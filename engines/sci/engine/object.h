@@ -67,6 +67,7 @@ public:
 		_baseVars = 0;
 		_methodCount = 0;
 		_propertyOffsetsSci3 = 0;
+		_originalVarNum = -1;
 	}
 
 	~Object() {
@@ -250,6 +251,12 @@ private:
 	reg_t _superClassPosSci3; /**< reg_t pointing to superclass for SCI3 */
 	reg_t _speciesSelectorSci3;	/**< reg_t containing species "selector" for SCI3 */
 	reg_t _infoSelectorSci3; /**< reg_t containing info "selector" for SCI3 */
+
+	/**
+	 * Some objects have a broken number of variables. We fix it, but
+	 * store the broken number here for debugging/workaround purposes.
+	 */
+	int _originalVarNum;
 };
 
 

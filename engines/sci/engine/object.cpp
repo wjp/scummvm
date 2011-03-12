@@ -104,9 +104,40 @@ int Object::locateVarSelector(SegManager *segMan, Selector slc) const {
 		buf = (const byte *)_baseVars;
 	}
 
-	for (uint i = 0; i < varnum; i++)
-		if (READ_SCI11ENDIAN_UINT16(buf + (i << 1)) == slc) // Found it?
+	for (uint i = 0; i < varnum; i++) {
+		// Found it?
+		if (READ_SCI11ENDIAN_UINT16(buf + (i << 1)) == slc) {
+
+			if (getSciVersion() <= SCI_VERSION_1_LATE &&
+			        _originalVarNum != -1 && i >= (uint)_originalVarNum) {
+				warning("%04x:%04x selector %02x (%s) would be missed "
+				        "as a varselector", PRINT_REG(_pos), slc,
+				        g_sci->getKernel()->getSelectorName(slc).c_str());
+			}
 			return i; // report success
+		}
+	}
+
+	if (getSciVersion() <= SCI_VERSION_1_LATE &&
+	        _originalVarNum != -1 && varnum < (uint)_originalVarNum) {
+		// SSCI would read past the end of the varselectors in this situation.
+		// We do the same to see if SSCI would find a match there.
+		// However, note that we can't read past the end of the segment,
+		// so we get its size first.
+		const Object *obj = getClass(segMan);
+		assert(obj);
+		const SegmentRef objRef = segMan->dereference(obj->_pos);
+		assert(objRef.isRaw);
+		assert(buf == objRef.raw + 2*varnum);
+		uint segBound = objRef.maxSize/2 - varnum;
+		for (uint i = varnum; i < (uint)_originalVarNum && i < segBound; i++) {
+			if (READ_SCI11ENDIAN_UINT16(buf + (i << 1)) == slc) {
+				warning("%04x:%04x selector %02x (%s) would be erroneously "
+				        "treated as a varselector", PRINT_REG(_pos), slc,
+				        g_sci->getKernel()->getSelectorName(slc).c_str());
+			}
+		}
+	}
 
 	return -1; // Failed
 }
@@ -174,6 +205,8 @@ bool Object::initBaseObject(SegManager *segMan, reg_t addr, bool doInitSuperClas
 	if (baseObj) {
 		if (_variables.size() != baseObj->getVarCount()) {
 			warning("Object %04x:%04x varnum doesn't match baseObj's: obj %d, base %d ", PRINT_REG(_pos), _variables.size(), baseObj->getVarCount());
+			_originalVarNum = _variables.size();
+
 			// These objects are probably broken.
 			// An example is 'witchCage' in script 200 in KQ5 (#3034714),
 			// but also 'girl' in script 216 and 'door' in script 22.
