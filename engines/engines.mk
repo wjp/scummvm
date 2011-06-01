@@ -136,6 +136,11 @@ DEFINES += -DENABLE_QUEEN=$(ENABLE_QUEEN)
 MODULES += engines/queen
 endif
 
+ifdef ENABLE_QUUX
+DEFINES += -DENABLE_QUUX=$(ENABLE_QUUX)
+MODULES += engines/quux
+endif
+
 ifdef ENABLE_SAGA
 DEFINES += -DENABLE_SAGA=$(ENABLE_SAGA)
 MODULES += engines/saga
