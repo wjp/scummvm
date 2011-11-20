@@ -26,6 +26,7 @@
  *  - agos
  *  - draci
  *  - kyra
+ *  - m4
  *  - queen
  *  - saga
  *  - sci
