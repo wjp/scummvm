@@ -57,6 +57,7 @@ private:
 	bool cmdSelectors(int argc, const char **argv);
 	bool cmdKernelFunctions(int argc, const char **argv);
 	bool cmdClassTable(int argc, const char **argv);
+	bool cmdDumpSymbols(int argc, const char **argv);
 	// Parser
 	bool cmdSuffixes(int argc, const char **argv);
 	bool cmdParseGrammar(int argc, const char **argv);
@@ -164,6 +165,7 @@ private:
 	void printList(List *list);
 	int printNode(reg_t addr);
 	void hexDumpReg(const reg_t *data, int len, int regsPerLine = 4, int startOffset = 0, bool isArray = false);
+	Common::String makeCIdentifier(const Common::String &s);
 
 private:
 	/**

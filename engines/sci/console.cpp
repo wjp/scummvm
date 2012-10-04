@@ -94,6 +94,7 @@ Console::Console(SciEngine *engine) : GUI::Debugger(),
 	DCmd_Register("selectors",			WRAP_METHOD(Console, cmdSelectors));
 	DCmd_Register("functions",			WRAP_METHOD(Console, cmdKernelFunctions));
 	DCmd_Register("class_table",		WRAP_METHOD(Console, cmdClassTable));
+	DCmd_Register("dump_symbols",		WRAP_METHOD(Console, cmdDumpSymbols));
 	// Parser
 	DCmd_Register("suffixes",			WRAP_METHOD(Console, cmdSuffixes));
 	DCmd_Register("parse_grammar",		WRAP_METHOD(Console, cmdParseGrammar));
@@ -330,6 +331,7 @@ bool Console::cmdHelp(int argc, const char **argv) {
 	DebugPrintf(" selector - Attempts to find the requested selector by name\n");
 	DebugPrintf(" functions - Lists the kernel functions\n");
 	DebugPrintf(" class_table - Shows the available classes\n");
+	DebugPrintf(" dump_symbols - Dumps function, selector and class symbols to a file\n");
 	DebugPrintf("\n");
 	DebugPrintf("Parser:\n");
 	DebugPrintf(" suffixes - Lists the vocabulary suffixes\n");
@@ -1233,6 +1235,73 @@ bool Console::cmdListSaves(int argc, const char **argv) {
 		DebugPrintf("%s: '%s'\n", filename.c_str(), saves[i].name);
 	}
 
+	return true;
+}
+
+Common::String Console::makeCIdentifier(const Common::String &s) {
+	Common::String ident = s;
+	for (uint i = 0; i < ident.size(); i++) {
+		if (!Common::isAlnum(ident[i]))
+			ident.setChar('_', i);
+	}
+	return ident;
+}
+
+bool Console::cmdDumpSymbols(int argc, const char **argv) {
+	if (argc != 2) {
+		DebugPrintf("Dumps function, selector and class symbols to a file\n");
+		DebugPrintf("ScummVM will automatically exit after executing this command!\n");
+		DebugPrintf("Usage: %s <filename>\n", argv[0]);
+		return true;
+	}
+
+	Common::DumpFile *outFile = new Common::DumpFile();
+	if (!outFile->open(argv[1])) {
+		DebugPrintf("Failed to open '%s' for output\n", argv[1]);
+		return true;
+	}
+
+	outFile->writeString("/* Kernel functions */\n");
+	for (uint seeker = 0; seeker <  _engine->getKernel()->getKernelNamesSize(); ++seeker) {
+		const Common::String &name = _engine->getKernel()->getKernelName(seeker);
+		Common::String str = Common::String::format("#define k_%-20s 0x%02x\n", makeCIdentifier(name).c_str(), seeker);
+		outFile->writeString(str);
+	}
+
+	outFile->writeString("\n/* Selectors */\n");
+	uint totalSize = _engine->getKernel()->getSelectorNamesSize();
+	for (uint seeker = 0; seeker < totalSize; ++seeker) {
+		Common::String name = _engine->getKernel()->getSelectorName(seeker);
+		if (name != "BAD SELECTOR") {
+			Common::String str = Common::String::format("#define s_%-20s 0x%04x\n", makeCIdentifier(name).c_str(), seeker);
+			outFile->writeString(str);
+		}
+	}
+
+	outFile->writeString("\n/* Classes */\n");
+	for (uint seeker = 0; seeker < _engine->_gamestate->_segMan->classTableSize(); ++seeker) {
+		Class c = _engine->_gamestate->_segMan->_classTable[seeker];
+		reg_t addr = c.reg;
+
+		if (addr.isNull()) {
+			// Try loading script, but only if the resource exists to prevent an error
+			if (_engine->getResMan()->findResource(ResourceId(kResourceTypeScript, c.script), false))
+				addr = _engine->_gamestate->_segMan->getClassAddress(seeker, SCRIPT_GET_LOAD, 0);
+			if (addr.isNull())
+				continue;
+		}
+
+		const Common::String &name = _engine->_gamestate->_segMan->getObjectName(addr);
+		if (name != "<no name>") {
+			Common::String str = Common::String::format("#define c_%-20s 0x%02x\n", makeCIdentifier(name).c_str(), seeker);
+			outFile->writeString(str);
+		}
+	}
+
+	outFile->finalize();
+	outFile->close();
+	// Quit for safety
+	g_system->quit();
 	return true;
 }
 
