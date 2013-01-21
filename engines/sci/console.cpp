@@ -1247,6 +1247,8 @@ Common::String Console::makeCIdentifier(const Common::String &s) {
 	return ident;
 }
 
+#define VERSION_STRING(s) Common::String::format("#define %-22s %d\n", #s, s)
+
 bool Console::cmdDumpSymbols(int argc, const char **argv) {
 	if (argc != 2) {
 		DebugPrintf("Dumps function, selector and class symbols to a file\n");
@@ -1261,21 +1263,32 @@ bool Console::cmdDumpSymbols(int argc, const char **argv) {
 		return true;
 	}
 
-	outFile->writeString("/* Kernel functions */\n");
+	outFile->writeString("/* SCI version */\n");
+	outFile->writeString(Common::String::format("#define %-22s %d\n", "SCI_VERSION", getSciVersion()));
+	outFile->writeString(VERSION_STRING(SCI_VERSION_0_EARLY));
+	outFile->writeString(VERSION_STRING(SCI_VERSION_0_LATE));
+	outFile->writeString(VERSION_STRING(SCI_VERSION_01));
+	outFile->writeString(VERSION_STRING(SCI_VERSION_1_EGA_ONLY));
+	outFile->writeString(VERSION_STRING(SCI_VERSION_1_EARLY));
+	outFile->writeString(VERSION_STRING(SCI_VERSION_1_MIDDLE));
+	outFile->writeString(VERSION_STRING(SCI_VERSION_1_LATE));
+	outFile->writeString(VERSION_STRING(SCI_VERSION_1_1));
+	outFile->writeString(VERSION_STRING(SCI_VERSION_2));
+	outFile->writeString(VERSION_STRING(SCI_VERSION_2_1));
+	outFile->writeString(VERSION_STRING(SCI_VERSION_3));
+
+	outFile->writeString("\n/* Kernel functions */\n");
 	for (uint seeker = 0; seeker <  _engine->getKernel()->getKernelNamesSize(); ++seeker) {
 		const Common::String &name = _engine->getKernel()->getKernelName(seeker);
-		Common::String str = Common::String::format("#define k_%-20s 0x%02x\n", makeCIdentifier(name).c_str(), seeker);
-		outFile->writeString(str);
+		outFile->writeString(Common::String::format("#define k_%-20s 0x%02x\n", makeCIdentifier(name).c_str(), seeker));
 	}
 
 	outFile->writeString("\n/* Selectors */\n");
 	uint totalSize = _engine->getKernel()->getSelectorNamesSize();
 	for (uint seeker = 0; seeker < totalSize; ++seeker) {
 		Common::String name = _engine->getKernel()->getSelectorName(seeker);
-		if (name != "BAD SELECTOR") {
-			Common::String str = Common::String::format("#define s_%-20s 0x%04x\n", makeCIdentifier(name).c_str(), seeker);
-			outFile->writeString(str);
-		}
+		if (name != "BAD SELECTOR")
+			outFile->writeString(Common::String::format("#define s_%-20s 0x%04x\n", makeCIdentifier(name).c_str(), seeker));
 	}
 
 	outFile->writeString("\n/* Classes */\n");
@@ -1292,10 +1305,8 @@ bool Console::cmdDumpSymbols(int argc, const char **argv) {
 		}
 
 		const Common::String &name = _engine->_gamestate->_segMan->getObjectName(addr);
-		if (name != "<no name>") {
-			Common::String str = Common::String::format("#define c_%-20s 0x%02x\n", makeCIdentifier(name).c_str(), seeker);
-			outFile->writeString(str);
-		}
+		if (name != "<no name>")
+			outFile->writeString(Common::String::format("#define c_%-20s 0x%02x\n", makeCIdentifier(name).c_str(), seeker));
 	}
 
 	outFile->finalize();
