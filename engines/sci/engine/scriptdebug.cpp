@@ -228,7 +228,7 @@ reg_t disassemble(EngineState *s, reg32_t pos, bool printBWTag, bool printByteco
 
 	if (pos == s->xs->addr.pc) { // Extra information if debugging the current opcode
 		if (opcode == op_callk) {
-			int stackframe = (scr[pos.getOffset() + (opsize & 1 ? 2 : 3)] >> 1) + (s->r_rest);
+			int stackframe = (opparams[1] >> 1) + s->r_rest;
 			int argc = ((s->xs->sp)[- stackframe - 1]).getOffset();
 			bool oldScriptHeader = (getSciVersion() == SCI_VERSION_0_EARLY);
 
