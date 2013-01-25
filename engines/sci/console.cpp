@@ -1298,8 +1298,10 @@ bool Console::cmdDumpSymbols(int argc, const char **argv) {
 
 		if (addr.isNull()) {
 			// Try loading script, but only if the resource exists to prevent an error
-			if (_engine->getResMan()->findResource(ResourceId(kResourceTypeScript, c.script), false))
-				addr = _engine->_gamestate->_segMan->getClassAddress(seeker, SCRIPT_GET_LOAD, 0);
+			if (_engine->getResMan()->findResource(ResourceId(kResourceTypeScript, c.script), false)) {
+				_engine->_gamestate->_segMan->instantiateScript(c.script);
+				addr = _engine->_gamestate->_segMan->_classTable[seeker].reg;
+			}
 			if (addr.isNull())
 				continue;
 		}
