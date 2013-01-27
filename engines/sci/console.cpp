@@ -1311,6 +1311,12 @@ bool Console::cmdDumpSymbols(int argc, const char **argv) {
 			outFile->writeString(Common::String::format("#define c_%-20s 0x%02x\n", makeCIdentifier(name).c_str(), seeker));
 	}
 
+	outFile->writeString("\n/* Features */\n");
+#ifdef ENABLE_SCI32
+	bool newKString = _engine->_features->detectSci2StringFunctionType() == kSci2StringFunctionNew;
+	outFile->writeString(Common::String::format("#define %-22s %d\n", "SCI_FTR_NEW_KSTRING", newKString));
+#endif
+
 	outFile->finalize();
 	outFile->close();
 	// Quit for safety
