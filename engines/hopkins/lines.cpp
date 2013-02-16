@@ -1859,7 +1859,6 @@ LABEL_158:
 		else
 			--v33;
 	}
-LABEL_171:
 	if (v92 >= destY) {
 LABEL_181:
 		for (int v43 = v92; v43 > destY; v43--) {
@@ -1925,91 +1924,55 @@ LABEL_202:
 	v54 = v98;
 	v93 = v97;
 LABEL_203:
+	int v61;
 	v114 = v54;
 	if (destX >= v54 - 2 && destX <= v54 + 2 && destY >= v93 - 2 && destY <= v93 + 2) {
 		essai2[v117].invalidate();
 		goto retLABEL_242;
 	}
-	if (v93 < destY) {
-		v55 = v93;
-		while (!checkCollisionLine(v114, v55, &collDataIdx, &collLineIdx, 0, _linesNumb)) {
-			essai2[v117].set(v114, v55, 5);
-			v117++;
-			++v55;
-			if (destY <= v55)
-				goto LABEL_211;
-		}
-		if (collLineIdx > _lastLine)
-			collLineIdx = -1;
-		goto retLABEL_249;
-	}
-LABEL_211:
-	if (v93 > destY) {
-		v58 = v93;
-		while (!checkCollisionLine(v114, v58, &collDataIdx, &collLineIdx, 0, _linesNumb)) {
-			essai2[v117].set(v114, v58, 1);
-			v117++;
-			--v58;
-			if (destY >= v58)
-				goto LABEL_217;
-		}
-		if (collLineIdx > _lastLine)
-			collLineIdx = -1;
-		goto retLABEL_249;
-	}
-	goto LABEL_217;	
 
-LABEL_217:
-	if (v114 < destX) {
-		for (int v61 = v114; v61 < destX; v61++) {
-			if (checkCollisionLine(v61, destY, &collDataIdx, &collLineIdx, 0, _linesNumb)) {
-				if (_lastLine < collLineIdx) {
-					int v62 = GENIAL(collLineIdx, collDataIdx, v61, destY, destX, destY, v117, essai2);
-					if (v62 == -1)
-						goto retLABEL_195;
-					v117 = v62;
-					if (NVPX != -1) {
-						if (NVPY != -1) {
-							v54 = NVPX;
-							v93 = NVPY;
-							colResult = checkCollisionLine(NVPX, NVPY, &collDataIdx, &collLineIdx, 0, _lastLine);
-							if (colResult && collLineIdx <= _lastLine)
-								goto retLABEL_249;
-							goto LABEL_203;
-						}
-					}
-				}
-				if (collLineIdx <= _lastLine)
-					goto retLABEL_249;
-			}
+	v55 = v93;
+	while (v55 != destY) {
+		if (checkCollisionLine(v114, v55, &collDataIdx, &collLineIdx, 0, _linesNumb)) {
+			if (collLineIdx > _lastLine)
+				collLineIdx = -1;
+			goto retLABEL_249;
+		}
+		essai2[v117].set(v114, v55, 5);
 
-			essai2[v117].set(v61, destY, 3);
-			v117++;
-		}
+		if (v55 < destY)
+			v55++;
+		else
+			v55--;
 	}
-	if (v114 > destX) {
-		for (int v65 = v114; v65 > destX; v65--) {
-			if (checkCollisionLine(v65, destY, &collDataIdx, &collLineIdx, 0, _linesNumb)) {
-				if (_lastLine < collLineIdx) {
-					v66 = GENIAL(collLineIdx, collDataIdx, v65, destY, destX, destY, v117, essai2);
-					if (v66 == -1)
-						goto retLABEL_242;
-					v117 = v66;
-					if (NVPX != -1 && NVPY != -1) {
-						v54 = NVPX;
-						v93 = NVPY;
-						colResult = checkCollisionLine(NVPX, NVPY, &collDataIdx, &collLineIdx, 0, _lastLine);
-						if (colResult && collLineIdx <= _lastLine)
-							goto retLABEL_249;
-						goto LABEL_203;
-					}
+
+	v61 = v114;
+	while (v61 != destX) {
+		if (checkCollisionLine(v61, destY, &collDataIdx, &collLineIdx, 0, _linesNumb)) {
+			if (_lastLine < collLineIdx) {
+				int v62 = GENIAL(collLineIdx, collDataIdx, v61, destY, destX, destY, v117, essai2);
+				if (v62 == -1)
+					goto retLABEL_195;
+				v117 = v62;
+				if (NVPX != -1 && NVPY != -1) {
+					v54 = NVPX;
+					v93 = NVPY;
+					colResult = checkCollisionLine(NVPX, NVPY, &collDataIdx, &collLineIdx, 0, _lastLine);
+					if (colResult && collLineIdx <= _lastLine)
+						goto retLABEL_249;
+					goto LABEL_203;
 				}
-				if (collLineIdx <= _lastLine)
-					goto retLABEL_249;
 			}
-			essai2[v117].set(v65, destY, 7);
-			v117++;
+			if (collLineIdx <= _lastLine)
+				goto retLABEL_249;
 		}
+
+		essai2[v117].set(v61, destY, 3);
+		v117++;
+		if (v61 < destX)
+			v61++;
+		else
+			v61--;
 	}
 	collLineIdx = -1;
 	essai2[v117].invalidate();
