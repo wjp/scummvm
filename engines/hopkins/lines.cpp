@@ -1555,14 +1555,9 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 	int v23;
 	int v24;
 	int v33;
-	int v36;
-	int v39;
-	int v40;
 	bool v45;
 	int v54;
 	int v55;
-	int v58;
-	int v66;
 	int newDirection;
 	int v92;
 	int v93;
@@ -1583,20 +1578,9 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 	int v108;
 	int v109;
 	int v111;
-	int v113;
 	int v114;
 	int v115;
-	int v116;
 	int v117;
-	int v118;
-	int v119;
-	int v120;
-	int v121;
-	int v122;
-	int v123;
-	int v124;
-	int v125;
-	bool v126 = false;
 	int collLineIdx;
 	int collDataIdx;
 	int v140;
@@ -1657,7 +1641,7 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 		v109 = curY;
 		if (destX >= curX - 2 && destX <= curX + 2 && destY >= curY - 2 && destY <= curY + 2) {
 			essai0[v115].invalidate();
-			goto retLABEL_150;
+			goto retLABEL_essai0;
 		}
 		distX = abs(curX - destX);
 		v10 = distX + 1;
@@ -1716,7 +1700,7 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 			v108 = v20;
 		if (v108 <= 10) {
 			essai0[v115].invalidate();
-			goto retLABEL_150;
+			goto retLABEL_essai0;
 		}
 		v21 = v108 - 1;
 		v102 = 1000 * v20 / v21;
@@ -1803,7 +1787,7 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 		v23 = 0;
 		if (v108 + 1 <= 0) {
 			essai0[v115].invalidate();
-			goto retLABEL_150;
+			goto retLABEL_essai0;
 		}
 		while (!checkCollisionLine(v104, v103, &v143, &v142, 0, _linesNumb)) {
 			essai0[v115].set(v104, v103, newDirection);
@@ -1815,14 +1799,14 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 			++v23;
 			if (v23 >= v108 + 1) {
 				essai0[v115].invalidate();
-				goto retLABEL_150;
+				goto retLABEL_essai0;
 			}
 		}
 		if (_lastLine >= v142)
 			break;
 		v24 = GENIAL(v142, v143, v104, v103, destX, destY, v115, essai0);
 		if (v24 == -1)
-			goto retLABEL_150;
+			goto retLABEL_essai0;
 		v115 = v24;
 		if (NVPX != -1 || NVPY != -1) {
 			v142 = -1;
@@ -1842,7 +1826,7 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 
 		if (destX >= v33 - 2 && destX <= v33 + 2 && destY >= v92 - 2 && destY <= v92 + 2) {
 			essai1[v117].invalidate();
-			goto retLABEL_195;
+			goto retLABEL_essai0;
 		}
 		while (v33 != destX) {
 			if (checkCollisionLine(v33, v92, &v141, &v140, 0, _linesNumb)) {
@@ -1869,7 +1853,7 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 
 				int v44 = GENIAL(v140, v141, destX, v43, destX, destY, v117, essai1);
 				if (v44 == -1)
-					goto retLABEL_195;
+					goto retLABEL_essai1;
 				v117 = v44;
 				if (NVPX != -1 && NVPY != -1)
 					break;
@@ -1883,7 +1867,7 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 		}
 		if (v43 == destY) {
 			essai1[v117].invalidate();
-			goto retLABEL_195;
+			goto retLABEL_essai1;
 		}
 		if (v140 <= _lastLine)
 			break;
@@ -1903,7 +1887,7 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 		v114 = v54;
 		if (destX >= v54 - 2 && destX <= v54 + 2 && destY >= v93 - 2 && destY <= v93 + 2) {
 			essai2[v117].invalidate();
-			goto retLABEL_242;
+			goto retLABEL_essai2;
 		}
 
 		v55 = v93;
@@ -1931,8 +1915,8 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 
 				int v62 = GENIAL(collLineIdx, collDataIdx, v61, destY, destX, destY, v117, essai2);
 				if (v62 == -1) {
-					// CHECKME: This goto was to 195, which is for essai1...
-					goto retLABEL_242;
+					// CHECKME: This goto was to retLABEL_essai1... 
+					goto retLABEL_essai2;
 				}
 				v117 = v62;
 				if (NVPX != -1 && NVPY != -1)
@@ -1949,7 +1933,7 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 		if (v61 == destX) {
 			collLineIdx = -1;
 			essai2[v117].invalidate();
-			goto retLABEL_242;
+			goto retLABEL_essai2;
 		}
 		if (collLineIdx <= _lastLine)
 			break;
@@ -2044,7 +2028,7 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 	}
 	return 0;
 
-retLABEL_150:
+retLABEL_essai0:
 	if (v115) {
 		int i = 0;
 		do {
@@ -2055,7 +2039,7 @@ retLABEL_150:
 	super_parcours[v137].invalidate();
 	return 1;
 
-retLABEL_195:
+retLABEL_essai1:
 	if (v117) {
 		int i = 0;
 		do {
@@ -2066,7 +2050,7 @@ retLABEL_195:
 	super_parcours[v137].invalidate();
 	return 1;
 
-retLABEL_242:
+retLABEL_essai2:
 	if (v117) {
 		int i = 0;
 		do {
