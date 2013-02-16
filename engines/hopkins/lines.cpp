@@ -1845,31 +1845,19 @@ LABEL_157:
 	v33 = v98;
 	v92 = v97;
 LABEL_158:
-	v113 = v33;
 	if (destX >= v33 - 2 && destX <= v33 + 2 && destY >= v92 - 2 && destY <= v92 + 2) {
 		essai1[v117].invalidate();
 	}
-	if (v33 < destX) {
-		while (!checkCollisionLine(v33, v92, &v141, &v140, 0, _linesNumb)) {
-			essai1[v117].set(v33, v92, 3);
-			v117++;
+	while (v33 != destX) {
+		if (checkCollisionLine(v33, v92, &v141, &v140, 0, _linesNumb))
+			goto LABEL_168;
+		essai1[v117].set(v33, v92, 3);
+		v117++;
+
+		if (v33 < destX)
 			++v33;
-			if (destX <= v33)
-				goto LABEL_165;
-		}
-		goto LABEL_168;
-	}
-LABEL_165:
-	if (v113 > destX) {
-		v36 = v113;
-		while (!checkCollisionLine(v36, v92, &v141, &v140, 0, _linesNumb)) {
-			essai1[v117].set(v36, v92, 7);
-			v117++;
-			--v36;
-			if (destX >= v36)
-				goto LABEL_171;
-		}
-		goto LABEL_168;
+		else
+			--v33;
 	}
 LABEL_171:
 	if (v92 >= destY) {
