@@ -1656,23 +1656,8 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 		v111 = curX;
 		v109 = curY;
 		if (destX >= curX - 2 && destX <= curX + 2 && destY >= curY - 2 && destY <= curY + 2) {
-LABEL_149:
 			essai0[v115].invalidate();
-
-LABEL_150:
-			if (v115) {
-				v116 = 0;
-				for (;;) {
-					super_parcours[v137] = essai0[v116];
-					v116++;
-					v137++;
-
-					if (!essai0[v116].isValid())
-						break;
-				}
-			}
-			super_parcours[v137].invalidate();
-			return 1;
+			goto retLABEL_150;
 		}
 		distX = abs(curX - destX);
 		v10 = distX + 1;
@@ -1711,8 +1696,10 @@ LABEL_72:
 		v108 = v95 + 1;
 		if (v20 > (v95 + 1))
 			v108 = v20;
-		if (v108 <= 10)
-			goto LABEL_149;
+		if (v108 <= 10) {
+			essai0[v115].invalidate();
+			goto retLABEL_150;
+		}
 		v21 = v108 - 1;
 		v102 = 1000 * v20 / v21;
 		v100 = 1000 * (v95 + 1) / v21;
@@ -1795,8 +1782,10 @@ LABEL_72:
 				newDirection = 1;
 		}
 		v23 = 0;
-		if (v108 + 1 <= 0)
-			goto LABEL_149;
+		if (v108 + 1 <= 0) {
+			essai0[v115].invalidate();
+			goto retLABEL_150;
+		}
 		while (!checkCollisionLine(v104, v103, &v143, &v142, 0, _linesNumb)) {
 			essai0[v115].set(v104, v103, newDirection);
 			v106 += v102;
@@ -1805,14 +1794,16 @@ LABEL_72:
 			v103 = v105 / 1000;
 			v115++;
 			++v23;
-			if (v23 >= v108 + 1)
-				goto LABEL_149;
+			if (v23 >= v108 + 1) {
+				essai0[v115].invalidate();
+				goto retLABEL_150;
+			}
 		}
 		if (_lastLine >= v142)
 			goto LABEL_157;
 		v24 = GENIAL(v142, v143, v104, v103, destX, destY, v115, essai0);
 		if (v24 == -1)
-			goto LABEL_150;
+			goto retLABEL_150;
 		v115 = v24;
 		if (NVPX != -1 || NVPY != -1) {
 			v142 = -1;
@@ -1855,8 +1846,9 @@ LABEL_157:
 	v92 = v97;
 LABEL_158:
 	v113 = v33;
-	if (destX >= v33 - 2 && destX <= v33 + 2 && destY >= v92 - 2 && destY <= v92 + 2)
-		goto LABEL_194;
+	if (destX >= v33 - 2 && destX <= v33 + 2 && destY >= v92 - 2 && destY <= v92 + 2) {
+		essai1[v117].invalidate();
+	}
 	if (v33 >= destX) {
 LABEL_165:
 		if (v113 > destX) {
@@ -1878,7 +1870,7 @@ LABEL_181:
 					if (_lastLine < v140) {
 						int v44 = GENIAL(v140, v141, destX, v43, destX, destY, v117, essai1);
 						if (v44 == -1)
-							goto LABEL_195;
+							goto retLABEL_195;
 						v117 = v44;
 						if (NVPX != -1 && NVPY != -1) {
 							v33 = NVPX;
@@ -1895,21 +1887,9 @@ LABEL_181:
 				essai1[v117].set(destX, v43, 1);
 				v117++;
 			}
-LABEL_194:
 			essai1[v117].invalidate();
-LABEL_195:
-			if (v117) {
-				v118 = 0;
-				for (;;) {
-					super_parcours[v137] = essai1[v118];
-					v118++;
-					v137++;
-					if (!essai1[v118].isValid())
-						break;
-				}
-			}
-			super_parcours[v137].invalidate();
-			return 1;
+			goto retLABEL_195;
+
 		}
 		v39 = v92;
 		for (;;) {
@@ -1917,7 +1897,7 @@ LABEL_195:
 				if (_lastLine < v140) {
 					v40 = GENIAL(v140, v141, destX, v39, destX, destY, v117, essai1);
 					if (v40 == -1)
-						goto LABEL_195;
+						goto retLABEL_195;
 					v117 = v40;
 					if (NVPX != -1 && NVPY != -1) {
 						v33 = NVPX;
@@ -1956,8 +1936,10 @@ LABEL_202:
 	v93 = v97;
 LABEL_203:
 	v114 = v54;
-	if (destX >= v54 - 2 && destX <= v54 + 2 && destY >= v93 - 2 && destY <= v93 + 2)
-		goto LABEL_241;
+	if (destX >= v54 - 2 && destX <= v54 + 2 && destY >= v93 - 2 && destY <= v93 + 2) {
+		essai2[v117].invalidate();
+		goto retLABEL_242;
+	}
 	if (v93 < destY) {
 		v55 = v93;
 		while (!checkCollisionLine(v114, v55, &collDataIdx, &collLineIdx, 0, _linesNumb)) {
@@ -2098,7 +2080,7 @@ LABEL_217:
 				if (_lastLine < collLineIdx) {
 					int v62 = GENIAL(collLineIdx, collDataIdx, v61, destY, destX, destY, v117, essai2);
 					if (v62 == -1)
-						goto LABEL_195;
+						goto retLABEL_195;
 					v117 = v62;
 					if (NVPX != -1) {
 						if (NVPY != -1) {
@@ -2125,7 +2107,7 @@ LABEL_217:
 				if (_lastLine < collLineIdx) {
 					v66 = GENIAL(collLineIdx, collDataIdx, v65, destY, destX, destY, v117, essai2);
 					if (v66 == -1)
-						goto LABEL_242;
+						goto retLABEL_242;
 					v117 = v66;
 					if (NVPX != -1 && NVPY != -1) {
 						v54 = NVPX;
@@ -2144,9 +2126,39 @@ LABEL_217:
 		}
 	}
 	collLineIdx = -1;
-LABEL_241:
 	essai2[v117].invalidate();
-LABEL_242:
+	goto retLABEL_242;
+
+retLABEL_150:
+	if (v115) {
+		v116 = 0;
+		for (;;) {
+			super_parcours[v137] = essai0[v116];
+			v116++;
+			v137++;
+
+			if (!essai0[v116].isValid())
+				break;
+		}
+	}
+	super_parcours[v137].invalidate();
+	return 1;
+
+retLABEL_195:
+	if (v117) {
+		v118 = 0;
+		for (;;) {
+			super_parcours[v137] = essai1[v118];
+			v118++;
+			v137++;
+			if (!essai1[v118].isValid())
+				break;
+		}
+	}
+	super_parcours[v137].invalidate();
+	return 1;
+
+retLABEL_242:
 	if (v117) {
 		v119 = 0;
 		for (;;) {
