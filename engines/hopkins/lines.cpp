@@ -1690,25 +1690,24 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 		if (newDirection == -1 && !checkSmoothMove(curX, v109, destX, destY) && !makeSmoothMove(curX, v109, destX, destY)) {
 			newDirection = _smoothMoveDirection;
 			v14 = 0;
-			for (;;) {
-				if (_smoothRoute[v14]._posX == -1 || _smoothRoute[v14]._posY == -1) {
-					v18 = v14 - 1;
-					v111 = _smoothRoute[v18]._posX;
-					v109 = _smoothRoute[v18]._posY;
-					goto LABEL_72;
-				}
+			for (v14 = 0; _smoothRoute[v14]._posX != -1 && _smoothRoute[v14]._posY != -1; ++v14) {
 				if (checkCollisionLine(_smoothRoute[v14]._posX, _smoothRoute[v14]._posY, &v143, &v142, 0, _linesNumb)) {
 					if (v142 > _lastLine)
 						v142 = -1;
-					goto LABEL_157;
+					break;
 				}
 
 				essai0[v115].set(_smoothRoute[v14]._posX, _smoothRoute[v14]._posY, newDirection);
 				v115++;
-				++v14;
 			}
+
+			if (_smoothRoute[v14]._posX != -1 && _smoothRoute[v14]._posY != -1)
+				break;
+
+			v18 = v14 - 1;
+			v111 = _smoothRoute[v18]._posX;
+			v109 = _smoothRoute[v18]._posY;
 		}
-LABEL_72:
 		v19 = abs(v111 - destX);
 		v20 = v19 + 1;
 		v95 = abs(v109 - destY);
@@ -1764,6 +1763,7 @@ LABEL_72:
 			}
 		}
 		if (v22 == 1) {
+			// CHECKME: Overlapping intervals
 			if (v100 >= -1 && v100 <= 510)
 				newDirection = 2;
 			if (v100 >= -510 && v100 <= 0)
@@ -1819,21 +1819,19 @@ LABEL_72:
 			}
 		}
 		if (_lastLine >= v142)
-			goto LABEL_157;
+			break;
 		v24 = GENIAL(v142, v143, v104, v103, destX, destY, v115, essai0);
 		if (v24 == -1)
 			goto retLABEL_150;
 		v115 = v24;
 		if (NVPX != -1 || NVPY != -1) {
 			v142 = -1;
-			goto LABEL_157;
+			break;
 		}
 		curX = -1;
 		curY = -1;
 	}
-	assert(false);
 
-LABEL_157:
 	essai0[v115].invalidate();
 
 	v117 = 0;
