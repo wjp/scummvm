@@ -1939,7 +1939,9 @@ LABEL_203:
 			if (destY <= v55)
 				goto LABEL_211;
 		}
-		goto LABEL_214;
+		if (collLineIdx > _lastLine)
+			collLineIdx = -1;
+		goto retLABEL_249;
 	}
 LABEL_211:
 	if (v93 > destY) {
@@ -1951,118 +1953,12 @@ LABEL_211:
 			if (destY >= v58)
 				goto LABEL_217;
 		}
-LABEL_214:
 		if (collLineIdx > _lastLine)
 			collLineIdx = -1;
-LABEL_249:
-		essai2[v117].invalidate();
-
-		if (!v136) {
-			if (a6 > foundLineIdx) {
-				if (essai0[0]._X != -1 && v142 > foundLineIdx && v140 <= v142 && collLineIdx <= v142 && a6 >= v142) {
-					NV_LIGNEDEP = v142;
-					NV_LIGNEOFS = v143;
-					v120 = 0;
-					for (;;) {
-						super_parcours[v137] = essai0[v120];
-						v120++;
-						v137++;
-						if (!essai0[v120].isValid())
-							break;
-					}
-					NV_POSI = v137;
-					return 2;
-				}
-				if (essai1[0]._X != -1 && foundLineIdx < v140 && collLineIdx <= v140 && v142 <= v140 && a6 >= v140) {
-					NV_LIGNEDEP = v140;
-					NV_LIGNEOFS = v141;
-					v121 = 0;
-					for (;;) {
-						assert(v137 <= 8000);
-						super_parcours[v137] = essai1[v121];
-						v121++;
-						v137++;
-						if (!essai1[v121].isValid())
-							break;
-					}
-					NV_POSI = v137;
-					return 2;
-				}
-				if (essai2[0]._X != -1) {
-					if (foundLineIdx < collLineIdx && v140 < collLineIdx && v142 < collLineIdx && a6 >= collLineIdx) {
-						NV_LIGNEDEP = collLineIdx;
-						NV_LIGNEOFS = collDataIdx;
-						v122 = 0;
-						for (;;) {
-							assert(v137 <= 8000);
-							super_parcours[v137] = essai2[v122];
-							v122++;
-							v137++;
-							if (!essai2[v122].isValid())
-								break;
-						};
-						NV_POSI = v137;
-						return 2;
-					}
-				}
-			}
-			if (a6 < foundLineIdx) {
-				if (v142 == -1)
-					v142 = 1300;
-				if (v140 == -1)
-					v142 = 1300;
-				if (collLineIdx == -1)
-					v142 = 1300;
-				if (essai1[0]._X != -1 && v140 < foundLineIdx && collLineIdx >= v140 && v142 >= v140 && a6 <= v140) {
-					NV_LIGNEDEP = v140;
-					NV_LIGNEOFS = v141;
-					v123 = 0;
-					for (;;) {
-						assert(137 <= 8000);
-						super_parcours[v137] = essai1[v123];
-						v123++;
-						v137++;
-						if (!essai1[v123].isValid())
-							break;
-					}
-					NV_POSI = v137;
-					return 2;
-				}
-				if (essai2[0]._X != -1 && foundLineIdx > collLineIdx && v140 >= collLineIdx && v142 >= collLineIdx && a6 <= collLineIdx) {
-					NV_LIGNEDEP = collLineIdx;
-					NV_LIGNEOFS = collDataIdx;
-					v124 = 0;
-					for (;;) {
-						assert(v137 <= 8000);
-						super_parcours[v137] = essai2[v124];
-						v124++;
-						v137++;
-						if (!essai2[v124].isValid())
-							break;
-					}
-					NV_POSI = v137;
-					return 2;
-				}
-				if (essai1[0]._X != -1 && foundLineIdx > v142 && v140 >= v142 && collLineIdx >= v142 && a6 <= v142) {
-					NV_LIGNEDEP = v142;
-					NV_LIGNEOFS = v143;
-					v125 = 0;
-					for (;;) {
-						assert(137 <= 8000);
-						super_parcours[v137] = essai0[v125];
-						v125++;
-						v137++;
-						if (!essai0[v125].isValid())
-							break;
-					}
-
-					NV_POSI = v137;
-					return 2;
-				}
-			}
-		}
-		return 0;
+		goto retLABEL_249;
 	}
+	goto LABEL_217;	
+
 LABEL_217:
 	if (v114 < destX) {
 		for (int v61 = v114; v61 < destX; v61++) {
@@ -2078,13 +1974,13 @@ LABEL_217:
 							v93 = NVPY;
 							colResult = checkCollisionLine(NVPX, NVPY, &collDataIdx, &collLineIdx, 0, _lastLine);
 							if (colResult && collLineIdx <= _lastLine)
-								goto LABEL_249;
+								goto retLABEL_249;
 							goto LABEL_203;
 						}
 					}
 				}
 				if (collLineIdx <= _lastLine)
-					goto LABEL_249;
+					goto retLABEL_249;
 			}
 
 			essai2[v117].set(v61, destY, 3);
@@ -2104,12 +2000,12 @@ LABEL_217:
 						v93 = NVPY;
 						colResult = checkCollisionLine(NVPX, NVPY, &collDataIdx, &collLineIdx, 0, _lastLine);
 						if (colResult && collLineIdx <= _lastLine)
-							goto LABEL_249;
+							goto retLABEL_249;
 						goto LABEL_203;
 					}
 				}
 				if (collLineIdx <= _lastLine)
-					goto LABEL_249;
+					goto retLABEL_249;
 			}
 			essai2[v117].set(v65, destY, 7);
 			v117++;
@@ -2118,6 +2014,114 @@ LABEL_217:
 	collLineIdx = -1;
 	essai2[v117].invalidate();
 	goto retLABEL_242;
+
+retLABEL_249:
+	essai2[v117].invalidate();
+
+	if (!v136) {
+		if (a6 > foundLineIdx) {
+			if (essai0[0]._X != -1 && v142 > foundLineIdx && v140 <= v142 && collLineIdx <= v142 && a6 >= v142) {
+				NV_LIGNEDEP = v142;
+				NV_LIGNEOFS = v143;
+				v120 = 0;
+				for (;;) {
+					super_parcours[v137] = essai0[v120];
+					v120++;
+					v137++;
+					if (!essai0[v120].isValid())
+						break;
+				}
+				NV_POSI = v137;
+				return 2;
+			}
+			if (essai1[0]._X != -1 && foundLineIdx < v140 && collLineIdx <= v140 && v142 <= v140 && a6 >= v140) {
+				NV_LIGNEDEP = v140;
+				NV_LIGNEOFS = v141;
+				v121 = 0;
+				for (;;) {
+					assert(v137 <= 8000);
+					super_parcours[v137] = essai1[v121];
+					v121++;
+					v137++;
+					if (!essai1[v121].isValid())
+						break;
+				}
+				NV_POSI = v137;
+				return 2;
+			}
+			if (essai2[0]._X != -1) {
+				if (foundLineIdx < collLineIdx && v140 < collLineIdx && v142 < collLineIdx && a6 >= collLineIdx) {
+					NV_LIGNEDEP = collLineIdx;
+					NV_LIGNEOFS = collDataIdx;
+					v122 = 0;
+					for (;;) {
+						assert(v137 <= 8000);
+						super_parcours[v137] = essai2[v122];
+						v122++;
+						v137++;
+						if (!essai2[v122].isValid())
+							break;
+					};
+					NV_POSI = v137;
+					return 2;
+				}
+			}
+		}
+		if (a6 < foundLineIdx) {
+			if (v142 == -1)
+				v142 = 1300;
+			if (v140 == -1)
+				v142 = 1300;
+			if (collLineIdx == -1)
+				v142 = 1300;
+			if (essai1[0]._X != -1 && v140 < foundLineIdx && collLineIdx >= v140 && v142 >= v140 && a6 <= v140) {
+				NV_LIGNEDEP = v140;
+				NV_LIGNEOFS = v141;
+				v123 = 0;
+				for (;;) {
+					assert(137 <= 8000);
+					super_parcours[v137] = essai1[v123];
+					v123++;
+					v137++;
+					if (!essai1[v123].isValid())
+						break;
+				}
+				NV_POSI = v137;
+				return 2;
+			}
+			if (essai2[0]._X != -1 && foundLineIdx > collLineIdx && v140 >= collLineIdx && v142 >= collLineIdx && a6 <= collLineIdx) {
+				NV_LIGNEDEP = collLineIdx;
+				NV_LIGNEOFS = collDataIdx;
+				v124 = 0;
+				for (;;) {
+					assert(v137 <= 8000);
+					super_parcours[v137] = essai2[v124];
+					v124++;
+					v137++;
+					if (!essai2[v124].isValid())
+						break;
+				}
+				NV_POSI = v137;
+				return 2;
+			}
+			if (essai1[0]._X != -1 && foundLineIdx > v142 && v140 >= v142 && collLineIdx >= v142 && a6 <= v142) {
+				NV_LIGNEDEP = v142;
+				NV_LIGNEOFS = v143;
+				v125 = 0;
+				for (;;) {
+					assert(137 <= 8000);
+					super_parcours[v137] = essai0[v125];
+					v125++;
+					v137++;
+					if (!essai0[v125].isValid())
+						break;
+				}
+					NV_POSI = v137;
+				return 2;
+			}
+		}
+	}
+	return 0;
 
 retLABEL_150:
 	if (v115) {
