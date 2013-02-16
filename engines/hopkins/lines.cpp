@@ -1849,6 +1849,7 @@ LABEL_157:
 
 		if (destX >= v33 - 2 && destX <= v33 + 2 && destY >= v92 - 2 && destY <= v92 + 2) {
 			essai1[v117].invalidate();
+			goto retLABEL_195;
 		}
 		while (v33 != destX) {
 			if (checkCollisionLine(v33, v92, &v141, &v140, 0, _linesNumb)) {
@@ -1936,8 +1937,10 @@ LABEL_157:
 					break;
 
 				int v62 = GENIAL(collLineIdx, collDataIdx, v61, destY, destX, destY, v117, essai2);
-				if (v62 == -1)
-					goto retLABEL_195;
+				if (v62 == -1) {
+					// CHECKME: This goto was to 195, which is for essai1...
+					goto retLABEL_242;
+				}
 				v117 = v62;
 				if (NVPX != -1 && NVPY != -1)
 					break;
