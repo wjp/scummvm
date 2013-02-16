@@ -1636,6 +1636,7 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 	collLineIdx = -1;
 
 	int distX, v10, distY, v12, v13, v14;
+	int repeatFlag = 0;
 	for (;;) {
 		v111 = curX;
 		v109 = curY;
@@ -1683,11 +1684,17 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 
 				essai0[v115].set(_smoothRoute[v14]._posX, _smoothRoute[v14]._posY, newDirection);
 				v115++;
+
+				if (repeatFlag == 1) {
+					repeatFlag = 2;
+					break;
+				}
 			}
 
-			if (_smoothRoute[v14]._posX != -1 && _smoothRoute[v14]._posY != -1)
+			if (repeatFlag != 2 && _smoothRoute[v14]._posX != -1 && _smoothRoute[v14]._posY != -1)
 				break;
 
+			repeatFlag = 1;
 			v18 = v14 - 1;
 			v111 = _smoothRoute[v18]._posX;
 			v109 = _smoothRoute[v18]._posY;
