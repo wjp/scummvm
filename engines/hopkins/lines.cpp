@@ -1687,8 +1687,27 @@ int LinesManager::PARC_PERS(int fromX, int fromY, int destX, int destY, int a5, 
 		if (v94 == -1 && (v101 >= -150 && v101 <= 0))
 			newDirection = 1;
 
-		if (newDirection == -1 && !checkSmoothMove(curX, v109, destX, destY) && !makeSmoothMove(curX, v109, destX, destY))
-			break;
+		if (newDirection == -1 && !checkSmoothMove(curX, v109, destX, destY) && !makeSmoothMove(curX, v109, destX, destY)) {
+			newDirection = _smoothMoveDirection;
+			v14 = 0;
+			for (;;) {
+				if (_smoothRoute[v14]._posX == -1 || _smoothRoute[v14]._posY == -1) {
+					v18 = v14 - 1;
+					v111 = _smoothRoute[v18]._posX;
+					v109 = _smoothRoute[v18]._posY;
+					goto LABEL_72;
+				}
+				if (checkCollisionLine(_smoothRoute[v14]._posX, _smoothRoute[v14]._posY, &v143, &v142, 0, _linesNumb)) {
+					if (v142 > _lastLine)
+						v142 = -1;
+					goto LABEL_157;
+				}
+
+				essai0[v115].set(_smoothRoute[v14]._posX, _smoothRoute[v14]._posY, newDirection);
+				v115++;
+				++v14;
+			}
+		}
 LABEL_72:
 		v19 = abs(v111 - destX);
 		v20 = v19 + 1;
@@ -1812,31 +1831,7 @@ LABEL_72:
 		curX = -1;
 		curY = -1;
 	}
-	newDirection = _smoothMoveDirection;
-	v14 = 0;
-	for (;;) {
-		if (_smoothRoute[v14]._posX == -1 || _smoothRoute[v14]._posY == -1) {
-			v126 = true;
-			v18 = v14 - 1;
-			v111 = _smoothRoute[v18]._posX;
-			v109 = _smoothRoute[v18]._posY;
-			goto LABEL_72;
-		}
-		if (checkCollisionLine(_smoothRoute[v14]._posX, _smoothRoute[v14]._posY, &v143, &v142, 0, _linesNumb))
-			break;
-
-		essai0[v115].set(_smoothRoute[v14]._posX, _smoothRoute[v14]._posY, newDirection);
-		v115++;
-		++v14;
-		if (v126) {
-			v18 = v14 - 1;
-			v111 = _smoothRoute[v18]._posX;
-			v109 = _smoothRoute[v18]._posY;
-			goto LABEL_72;
-		}
-	}
-	if (v142 > _lastLine)
-		v142 = -1;
+	assert(false);
 
 LABEL_157:
 	essai0[v115].invalidate();
