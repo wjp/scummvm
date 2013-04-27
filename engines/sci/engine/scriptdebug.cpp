@@ -245,7 +245,7 @@ reg_t disassemble(EngineState *s, reg32_t pos, bool printBWTag, bool printByteco
 			debugN(")\n");
 		} else if ((opcode == op_send) || (opcode == op_self)) {
 			int restmod = s->r_rest;
-			int stackframe = (scr[pos.getOffset() + 1] >> 1) + restmod;
+			int stackframe = (opparams[0] >> 1) + restmod;
 			reg_t *sb = s->xs->sp;
 			uint16 selector;
 			reg_t fun_ref;
