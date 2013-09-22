@@ -38,6 +38,8 @@
 namespace Wintermute {
 class BaseSurfaceOSystem;
 class RenderTicket;
+class DirtyRectContainer;
+
 /**
  * A 2D-renderer implementation for WME.
  * This renderer makes use of a "ticket"-system, where all draw-calls
@@ -121,7 +123,7 @@ private:
 	// Dirty-rects:
 	void drawFromSurface(RenderTicket *ticket, Common::Rect *dstRect, Common::Rect *clipRect);
 	typedef Common::List<RenderTicket *>::iterator RenderQueueIterator;
-	Common::Rect *_dirtyRect;
+	DirtyRectContainer *_dirtyRects;
 	Common::List<RenderTicket *> _renderQueue;
 	RenderQueueIterator _lastAddedTicket;
 	RenderTicket *_previousTicket;
