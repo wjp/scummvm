@@ -75,8 +75,6 @@ bool UITiledImage::display(int x, int y, int width, int height) {
 	int nuColumns = (width - (_middleLeft.right - _middleLeft.left) - (_middleRight.right - _middleRight.left)) / tileWidth;
 	int nuRows = (height - (_upMiddle.bottom - _upMiddle.top) - (_downMiddle.bottom - _downMiddle.top)) / tileHeight;
 
-	int col, row;
-
 	_gameRef->_renderer->startSpriteBatch();
 
 	// top left/right
@@ -89,26 +87,19 @@ bool UITiledImage::display(int x, int y, int width, int height) {
 
 	// left/right
 	int yyy = y + (_upMiddle.bottom - _upMiddle.top);
-	for (row = 0; row < nuRows; row++) {
-		_image->_surface->displayTrans(x,                                                       yyy, _middleLeft);
-		_image->_surface->displayTrans(x + (_middleLeft.right - _middleLeft.left) + nuColumns * tileWidth, yyy, _middleRight);
-		yyy += tileWidth;
-	}
+	_image->_surface->displayTiled(x, yyy, _middleLeft, 1, nuRows);
+	_image->_surface->displayTiled(x + (_middleLeft.right - _middleLeft.left) + nuColumns * tileWidth, yyy, _middleRight, 1, nuRows);
 
 	// top/bottom
 	int xxx = x + (_upLeft.right - _upLeft.left);
-	for (col = 0; col < nuColumns; col++) {
-		_image->_surface->displayTrans(xxx, y, _upMiddle);
-		_image->_surface->displayTrans(xxx, y + (_upMiddle.bottom - _upMiddle.top) + nuRows * tileHeight, _downMiddle);
-		xxx += tileWidth;
-	}
+	_image->_surface->displayTiled(xxx, y, _upMiddle, nuColumns, 1);
+	_image->_surface->displayTiled(xxx, y + (_upMiddle.bottom - _upMiddle.top) + nuRows * tileHeight, _downMiddle, nuColumns, 1);
 
 	// tiles
 	if (nuRows > 0 && nuColumns > 0) {
 		yyy = y + (_upMiddle.bottom - _upMiddle.top);
 		xxx = x + (_upLeft.right - _upLeft.left);
-		_image->_surface->displayTrans(xxx, yyy, _middleMiddle);
-		_image->_surface->repeatLastDisplayOp(tileWidth, tileWidth, nuColumns, nuRows);
+		_image->_surface->displayTiled(xxx, yyy, _middleMiddle, nuColumns, nuRows);
 	}
 
 	_gameRef->_renderer->endSpriteBatch();
