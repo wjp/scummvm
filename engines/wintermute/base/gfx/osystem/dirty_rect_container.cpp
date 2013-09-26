@@ -358,7 +358,7 @@ Common::Array<Common::Rect *> DirtyRectContainer::getOptimized() {
 					Common::Rect *rightSlice = new Common::Rect(*candidate);
 					_cleanMe.insert_at(_cleanMe.size(), rightSlice);
 
-					rightSlice->right = existing->left;
+					rightSlice->left = existing->right;
 					if (rightSlice->height() > 0 && rightSlice->width() > 0)
 						queue.insert_at(queue.size(), rightSlice);
 
