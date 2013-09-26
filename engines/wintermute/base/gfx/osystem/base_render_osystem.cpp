@@ -411,7 +411,6 @@ void BaseRenderOSystem::drawTickets() {
 				_needsFlip = true;
 			} // endif
 			// Some tickets want redraw but don't actually clip the dirty area (typically the ones that shouldnt become clear-color)
-			ticket->_wantsDraw = false;
 		} // end inner for
 		g_system->copyRectToScreen((byte *)_renderSurface->getBasePtr(_dirtyRect->left, _dirtyRect->top), _renderSurface->pitch, _dirtyRect->left, _dirtyRect->top, _dirtyRect->width(), _dirtyRect->height());
 	} // endfor
@@ -426,6 +425,7 @@ void BaseRenderOSystem::drawTickets() {
 			it = _renderQueue.erase(it);
 			delete ticket;
 		} else {
+			(*it)->_wantsDraw = false;
 			++it;
 		}
 	} // endwhile
