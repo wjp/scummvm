@@ -86,19 +86,23 @@ bool UITiledImage::display(int x, int y, int width, int height) {
 	_image->_surface->displayTrans(x + (_upLeft.right - _upLeft.left) + nuColumns * tileWidth, y + (_upMiddle.bottom - _upMiddle.top) + nuRows * tileHeight, _downRight);
 
 	// left/right
-	int yyy = y + (_upMiddle.bottom - _upMiddle.top);
-	_image->_surface->displayTiled(x, yyy, _middleLeft, 1, nuRows);
-	_image->_surface->displayTiled(x + (_middleLeft.right - _middleLeft.left) + nuColumns * tileWidth, yyy, _middleRight, 1, nuRows);
+	if (nuRows > 0) {
+		int yyy = y + (_upMiddle.bottom - _upMiddle.top);
+		_image->_surface->displayTiled(x, yyy, _middleLeft, 1, nuRows);
+		_image->_surface->displayTiled(x + (_middleLeft.right - _middleLeft.left) + nuColumns * tileWidth, yyy, _middleRight, 1, nuRows);
+	}
 
 	// top/bottom
-	int xxx = x + (_upLeft.right - _upLeft.left);
-	_image->_surface->displayTiled(xxx, y, _upMiddle, nuColumns, 1);
-	_image->_surface->displayTiled(xxx, y + (_upMiddle.bottom - _upMiddle.top) + nuRows * tileHeight, _downMiddle, nuColumns, 1);
+	if (nuColumns > 0) {
+		int xxx = x + (_upLeft.right - _upLeft.left);
+		_image->_surface->displayTiled(xxx, y, _upMiddle, nuColumns, 1);
+		_image->_surface->displayTiled(xxx, y + (_upMiddle.bottom - _upMiddle.top) + nuRows * tileHeight, _downMiddle, nuColumns, 1);
+	}
 
 	// tiles
 	if (nuRows > 0 && nuColumns > 0) {
-		yyy = y + (_upMiddle.bottom - _upMiddle.top);
-		xxx = x + (_upLeft.right - _upLeft.left);
+		int yyy = y + (_upMiddle.bottom - _upMiddle.top);
+		int xxx = x + (_upLeft.right - _upLeft.left);
 		_image->_surface->displayTiled(xxx, yyy, _middleMiddle, nuColumns, nuRows);
 	}
 
