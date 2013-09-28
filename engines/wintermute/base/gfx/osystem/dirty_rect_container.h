@@ -92,7 +92,7 @@ private:
 	/**
 	 * How big has the DirtyRect input list grown?
 	 */
-	int getSize();
+	uint getSize();
 	/**
 	 * True if DR are temporarily disabled.
 	 * Only the DirtyRectContainer, single point of handling of all matters dirtyrect,
