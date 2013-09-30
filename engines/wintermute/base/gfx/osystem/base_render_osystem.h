@@ -147,7 +147,6 @@ private:
 	bool _disableDirtyRects;
 	float _ratioX;
 	float _ratioY;
-	uint32 _colorMod;
 	uint32 _clearColor;
 
 	bool _skipThisFrame;

@@ -57,7 +57,6 @@ BaseRenderOSystem::BaseRenderOSystem(BaseGame *inGame) : BaseRenderer(inGame) {
 
 	_borderLeft = _borderRight = _borderTop = _borderBottom = 0;
 	_ratioX = _ratioY = 1.0f;
-	_colorMod = kDefaultRgbaMod;
 	_dirtyRects = new DirtyRectContainer();
 	_disableDirtyRects = false;
 	if (ConfMan.hasKey("dirty_rects")) {
@@ -258,7 +257,6 @@ void BaseRenderOSystem::drawSurface(BaseSurfaceOSystem *owner, const Graphics::S
 
 	if (_disableDirtyRects) {
 		RenderTicket *ticket = new RenderTicket(owner, surf, srcRect, dstRect, transform);
-		ticket->_transform._rgbaMod = _colorMod;
 		ticket->_wantsDraw = true;
 		_renderQueue.push_back(ticket);
 		drawFromSurface(ticket);
@@ -286,7 +284,6 @@ void BaseRenderOSystem::drawSurface(BaseSurfaceOSystem *owner, const Graphics::S
 		for (it = _lastAddedTicket; it != endIterator; ++it) {
 			compareTicket = *it;
 			if (*(compareTicket) == compare && compareTicket->_isValid) {
-				compareTicket->_transform._rgbaMod = transform._rgbaMod; 
 				if (_disableDirtyRects) {
 					drawFromSurface(compareTicket);
 				} else {
@@ -406,7 +403,6 @@ void BaseRenderOSystem::drawTickets() {
 				// convert from screen-coords to surface-coords.
 				dstClip.translate(-offsetX, -offsetY);
 
-				_colorMod = ticket->_transform._rgbaMod; 
 				drawFromSurface(ticket, &pos, &dstClip);
 				_needsFlip = true;
 			} // endif
