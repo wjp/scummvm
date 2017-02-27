@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -39,7 +39,7 @@
 
 namespace Audio {
 
-class ADPCMStream : public RewindableAudioStream {
+class ADPCMStream : public SeekableAudioStream {
 protected:
 	Common::DisposablePtr<Common::SeekableReadStream> _stream;
 	int32 _startpos;
@@ -67,6 +67,8 @@ public:
 	virtual int getRate() const { return _rate; }
 
 	virtual bool rewind();
+	virtual bool seek(const Timestamp &where) { return false; }
+	virtual Timestamp getLength() const { return -1; }
 
 	/**
 	 * This table is used by some ADPCM variants (IMA and OKI) to adjust the
@@ -206,12 +208,21 @@ public:
 		if (blockAlign == 0)
 			error("MS_ADPCMStream(): blockAlign isn't specified for MS ADPCM");
 		memset(&_status, 0, sizeof(_status));
+		_decodedSampleCount = 0;
+		_decodedSampleIndex = 0;
 	}
+
+	virtual bool endOfData() const { return (_stream->eos() || _stream->pos() >= _endpos) && (_decodedSampleCount == 0); }
 
 	virtual int readBuffer(int16 *buffer, const int numSamples);
 
 protected:
 	int16 decodeMS(ADPCMChannelStatus *c, byte);
+
+private:
+	uint8 _decodedSampleCount;
+	uint8 _decodedSampleIndex;
+	int16 _decodedSamples[4];
 };
 
 // Duck DK3 IMA ADPCM Decoder

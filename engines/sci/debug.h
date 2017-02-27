@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -42,12 +42,16 @@ enum BreakpointType {
 	 * Break when an exported function is called. Data contains
 	 * script_no << 16 | export_no.
 	 */
-	BREAK_EXPORT        = 1 << 3
+	BREAK_EXPORT        = 1 << 3,
+	BREAK_ADDRESS       = 1 << 4  // break when pc is at this address
 };
 
 struct Breakpoint {
 	BreakpointType type;
-	uint32 address;  ///< Breakpoints on exports
+	union {
+		uint32 address;     ///< Breakpoints on exports
+		reg32_t regAddress; ///< Breakpoints on addresses
+	};
 	Common::String name; ///< Breakpoints on selector names
 };
 

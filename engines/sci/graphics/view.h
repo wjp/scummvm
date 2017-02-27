@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -55,6 +55,7 @@ struct LoopInfo {
 
 class GfxScreen;
 class GfxPalette;
+class Resource;
 
 /**
  * View class, handles loading of view resources and drawing contained cels to screen
@@ -85,15 +86,13 @@ public:
 	void adjustToUpscaledCoordinates(int16 &y, int16 &x);
 	void adjustBackUpscaledCoordinates(int16 &y, int16 &x);
 
-	byte getColorAtCoordinate(int16 loopNo, int16 celNo, int16 x, int16 y);
-
 private:
 	void initData(GuiResourceId resourceId);
 	void unpackCel(int16 loopNo, int16 celNo, byte *outPtr, uint32 pixelCount);
 	void unditherBitmap(byte *bitmap, int16 width, int16 height, byte clearKey);
 
 	ResourceManager *_resMan;
-	GfxCoordAdjuster *_coordAdjuster;
+	GfxCoordAdjuster16 *_coordAdjuster;
 	GfxScreen *_screen;
 	GfxPalette *_palette;
 

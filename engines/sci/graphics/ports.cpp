@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -63,10 +63,10 @@ void GfxPorts::init(bool usesOldGfxFunctions, GfxPaint16 *paint16, GfxText16 *te
 	openPort(_menuPort);
 	setPort(_menuPort);
 	_text16->SetFont(0);
-	_menuPort->rect = Common::Rect(0, 0, _screen->getWidth(), _screen->getHeight());
-	_menuBarRect = Common::Rect(0, 0, _screen->getWidth(), 9);
-	_menuRect = Common::Rect(0, 0, _screen->getWidth(), 10);
-	_menuLine = Common::Rect(0, 9, _screen->getWidth(), 10);
+	_menuPort->rect = Common::Rect(0, 0, _screen->getScriptWidth(), _screen->getScriptHeight());
+	_menuBarRect = Common::Rect(0, 0, _screen->getScriptWidth(), 9);
+	_menuRect = Common::Rect(0, 0, _screen->getScriptWidth(), 10);
+	_menuLine = Common::Rect(0, 9, _screen->getScriptWidth(), 10);
 
 	_wmgrPort = new Port(1);
 	_windowsById.resize(2);
@@ -116,22 +116,22 @@ void GfxPorts::init(bool usesOldGfxFunctions, GfxPaint16 *paint16, GfxText16 *te
 	setPort(_wmgrPort);
 	// SCI0 games till kq4 (.502 - not including) did not adjust against _wmgrPort in kNewWindow
 	//  We leave _wmgrPort top at 0, so the adjustment wont get done
-	if (!g_sci->_features->usesOldGfxFunctions()) {
+	if (!_usesOldGfxFunctions) {
 		setOrigin(0, offTop);
 		_wmgrPort->rect.bottom = _screen->getHeight() - offTop;
 	} else {
 		_wmgrPort->rect.bottom = _screen->getHeight();
 	}
-	_wmgrPort->rect.right = _screen->getWidth();
+	_wmgrPort->rect.right = _screen->getScriptWidth();
 	_wmgrPort->rect.moveTo(0, 0);
 	_wmgrPort->curTop = 0;
 	_wmgrPort->curLeft = 0;
 	_windowList.push_front(_wmgrPort);
 
-	_picWind = addWindow(Common::Rect(0, offTop, _screen->getWidth(), _screen->getHeight()), 0, 0, SCI_WINDOWMGR_STYLE_TRANSPARENT | SCI_WINDOWMGR_STYLE_NOFRAME, 0, true);
+	_picWind = addWindow(Common::Rect(0, offTop, _screen->getScriptWidth(), _screen->getScriptHeight()), 0, 0, SCI_WINDOWMGR_STYLE_TRANSPARENT | SCI_WINDOWMGR_STYLE_NOFRAME, 0, true);
 	// For SCI0 games till kq4 (.502 - not including) we set _picWind top to offTop instead
 	//  Because of the menu/status bar
-	if (g_sci->_features->usesOldGfxFunctions())
+	if (_usesOldGfxFunctions)
 		_picWind->top = offTop;
 
 	kernelInitPriorityBands();
@@ -300,11 +300,6 @@ Window *GfxPorts::addWindow(const Common::Rect &dims, const Common::Rect *restor
 	Window *pwnd = new Window(id);
 	Common::Rect r;
 
-	if (!pwnd) {
-		error("Can't open window");
-		return 0;
-	}
-
 	_windowsById[id] = pwnd;
 
 	// KQ1sci, KQ4, iceman, QfG2 always add windows to the back of the list.
@@ -326,13 +321,13 @@ Window *GfxPorts::addWindow(const Common::Rect &dims, const Common::Rect *restor
 	// their interpreter even in the newer VGA games.
 	r.left = r.left & 0xFFFE;
 
-	if (r.width() > _screen->getWidth()) {
+	if (r.width() > _screen->getScriptWidth()) {
 		// We get invalid dimensions at least at the end of sq3 (script bug!).
 		// Same happens very often in lsl5, sierra sci didnt fix it but it looked awful.
 		// Also happens frequently in the demo of GK1.
 		warning("Fixing too large window, left: %d, right: %d", dims.left, dims.right);
 		r.left = 0;
-		r.right = _screen->getWidth() - 1;
+		r.right = _screen->getScriptWidth() - 1;
 		if ((style != _styleUser) && !(style & SCI_WINDOWMGR_STYLE_NOFRAME))
 			r.right--;
 	}
@@ -380,17 +375,50 @@ Window *GfxPorts::addWindow(const Common::Rect &dims, const Common::Rect *restor
 	int16 oldtop = pwnd->dims.top;
 	int16 oldleft = pwnd->dims.left;
 
-	if (wmprect.top > pwnd->dims.top)
+	// WORKAROUND: We also adjust the restore rect when adjusting the window
+	// rect.
+	// SSCI does not do this. It wasn't necessary in the original interpreter,
+	// but it is needed for Freddy Pharkas CD. This version does not normally
+	// have text, but we allow this by modifying the text/speech setting
+	// according to what is set in the ScummVM GUI (refer to syncIngameAudioOptions()
+	// in sci.cpp). Since the text used in Freddy Pharkas CD is quite large in
+	// some cases, it ends up being offset in order to fit inside the screen,
+	// but the associated restore rect isn't adjusted accordingly, leading to
+	// artifacts being left on screen when some text boxes are removed. The
+	// fact that the restore rect wasn't ever adjusted doesn't make sense, and
+	// adjusting it shouldn't have any negative side-effects (it *should* be
+	// adjusted, normally, but SCI doesn't do it). The big text boxes are still
+	// odd-looking, because the text rect is drawn outside the text window rect,
+	// but at least there aren't any leftover textbox artifacts left when the
+	// boxes are removed. Adjusting the text window rect would require more
+	// invasive changes than this one, thus it's not really worth the effort
+	// for a feature that was not present in the original game, and its
+	// implementation is buggy in the first place.
+	// Adjusting the restore rect properly fixes bug #3575276.
+
+	if (wmprect.top > pwnd->dims.top) {
 		pwnd->dims.moveTo(pwnd->dims.left, wmprect.top);
+		if (restoreRect)
+			pwnd->restoreRect.moveTo(pwnd->restoreRect.left, wmprect.top);
+	}
 
-	if (wmprect.bottom < pwnd->dims.bottom)
+	if (wmprect.bottom < pwnd->dims.bottom) {
 		pwnd->dims.moveTo(pwnd->dims.left, wmprect.bottom - pwnd->dims.bottom + pwnd->dims.top);
+		if (restoreRect)
+			pwnd->restoreRect.moveTo(pwnd->restoreRect.left, wmprect.bottom - pwnd->restoreRect.bottom + pwnd->restoreRect.top);
+	}
 
-	if (wmprect.right < pwnd->dims.right)
+	if (wmprect.right < pwnd->dims.right) {
 		pwnd->dims.moveTo(wmprect.right + pwnd->dims.left - pwnd->dims.right, pwnd->dims.top);
+		if (restoreRect)
+			pwnd->restoreRect.moveTo(wmprect.right + pwnd->restoreRect.left - pwnd->restoreRect.right, pwnd->restoreRect.top);
+	}
 
-	if (wmprect.left > pwnd->dims.left)
+	if (wmprect.left > pwnd->dims.left) {
 		pwnd->dims.moveTo(wmprect.left, pwnd->dims.top);
+		if (restoreRect)
+			pwnd->restoreRect.moveTo(wmprect.left, pwnd->restoreRect.top);
+	}
 
 	pwnd->rect.moveTo(pwnd->rect.left + pwnd->dims.left - oldleft, pwnd->rect.top + pwnd->dims.top - oldtop);
 
@@ -504,7 +532,7 @@ void GfxPorts::freeWindow(Window *pWnd) {
 	if (!pWnd->hSaved1.isNull())
 		_segMan->freeHunkEntry(pWnd->hSaved1);
 	if (!pWnd->hSaved2.isNull())
-		_segMan->freeHunkEntry(pWnd->hSaved1);
+		_segMan->freeHunkEntry(pWnd->hSaved2);
 	_windowsById[pWnd->id] = NULL;
 	delete pWnd;
 }
@@ -689,8 +717,10 @@ void GfxPorts::kernelGraphAdjustPriority(int top, int bottom) {
 }
 
 byte GfxPorts::kernelCoordinateToPriority(int16 y) {
-	if (y < _priorityTop)
-		return _priorityBands[_priorityTop];
+	if (y < 0) // Sierra did not check this, we do for safety reasons
+		return _priorityBands[0];
+	// do NOT check for _priorityTop in here. Sierra never did that and it would cause
+	// at least priority issues in room 54 of lsl2 (airplane)
 	if (y > _priorityBottom)
 		return _priorityBands[_priorityBottom];
 	return _priorityBands[y];
@@ -720,7 +750,7 @@ void GfxPorts::printWindowList(Console *con) {
 	for (PortList::const_iterator it = _windowList.begin(); it != _windowList.end(); ++it) {
 		if ((*it)->isWindow()) {
 			Window *wnd = ((Window *)*it);
-			con->DebugPrintf("%d: '%s' at %d, %d, (%d, %d, %d, %d), drawn: %d, style: %d\n",
+			con->debugPrintf("%d: '%s' at %d, %d, (%d, %d, %d, %d), drawn: %d, style: %d\n",
 					wnd->id, wnd->title.c_str(), wnd->left, wnd->top,
 					wnd->rect.left, wnd->rect.top, wnd->rect.right, wnd->rect.bottom,
 					wnd->bDrawn, wnd->wndStyle);

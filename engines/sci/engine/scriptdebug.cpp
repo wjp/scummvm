@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -68,7 +68,7 @@ const char *opcodeNames[] = {
 #endif	// REDUCE_MEMORY_USAGE
 
 // Disassembles one command from the heap, returns address of next command or 0 if a ret was encountered.
-reg_t disassemble(EngineState *s, reg32_t pos, bool printBWTag, bool printBytecode) {
+reg_t disassemble(EngineState *s, reg32_t pos, reg_t objAddr, bool printBWTag, bool printBytecode) {
 	SegmentObj *mobj = s->_segMan->getSegment(pos.getSegment(), SEG_TYPE_SCRIPT);
 	Script *script_entity = NULL;
 	const byte *scr;
@@ -79,7 +79,7 @@ reg_t disassemble(EngineState *s, reg32_t pos, bool printBWTag, bool printByteco
 	Kernel *kernel = g_sci->getKernel();
 
 	if (!mobj) {
-		warning("Disassembly failed: Segment %04x non-existant or not a script", pos.getSegment());
+		warning("Disassembly failed: Segment %04x non-existent or not a script", pos.getSegment());
 		return retval;
 	} else
 		script_entity = (Script *)mobj;
@@ -99,17 +99,6 @@ reg_t disassemble(EngineState *s, reg32_t pos, bool printBWTag, bool printByteco
 
 	debugN("%04x:%04x: ", PRINT_REG(pos));
 
-	if (opcode == op_pushSelf) { // 0x3e (62)
-		if ((opsize & 1) && g_sci->getGameId() != GID_FANMADE) {
-			// Debug opcode op_file
-			debugN("file \"%s\"\n", scr + pos.getOffset() + 1);	// +1: op_pushSelf size
-			retval.incOffset(bytecount - 1);
-			return retval;
-		}
-	}
-
-	opsize &= 1; // byte if true, word if false
-
 	if (printBytecode) {
 		if (pos.getOffset() + bytecount > scr_size) {
 			warning("Operation arguments extend beyond end of script");
@@ -123,12 +112,23 @@ reg_t disassemble(EngineState *s, reg32_t pos, bool printBWTag, bool printByteco
 			debugN("   ");
 	}
 
+	opsize &= 1; // byte if true, word if false
+
 	if (printBWTag)
 		debugN("[%c] ", opsize ? 'B' : 'W');
 
+	if (opcode == op_pushSelf && opsize && g_sci->getGameId() != GID_FANMADE) { // 0x3e (62)
+		// Debug opcode op_file
+		debugN("file \"%s\"\n", scr + pos.getOffset() + 1);	// +1: op_pushSelf size
+		retval.incOffset(bytecount - 1);
+		return retval;
+	}
+
 #ifndef REDUCE_MEMORY_USAGE
-	debugN("%s", opcodeNames[opcode]);
+	debugN("%-5s", opcodeNames[opcode]);
 #endif
+
+	static const char *defaultSeparator = "\t\t; ";
 
 	i = 0;
 	while (g_sci->_opcode_formats[opcode][i]) {
@@ -140,14 +140,21 @@ reg_t disassemble(EngineState *s, reg32_t pos, bool printBWTag, bool printByteco
 		case Script_SByte:
 		case Script_Byte:
 			param_value = scr[retval.getOffset()];
-			debugN(" %02x", scr[retval.getOffset()]);
+			debugN("\t%02x", param_value);
+			if (param_value > 9) {
+				debugN("%s%u", defaultSeparator, param_value);
+			}
 			retval.incOffset(1);
 			break;
 
 		case Script_Word:
 		case Script_SWord:
 			param_value = READ_SCI11ENDIAN_UINT16(&scr[retval.getOffset()]);
-			debugN(" %04x", READ_SCI11ENDIAN_UINT16(&scr[retval.getOffset()]));
+			debugN("\t%04x", param_value);
+			if (param_value > 9) {
+				debugN("%s%u", defaultSeparator, param_value);
+			}
+
 			retval.incOffset(2);
 			break;
 
@@ -166,12 +173,38 @@ reg_t disassemble(EngineState *s, reg32_t pos, bool printBWTag, bool printByteco
 				retval.incOffset(2);
 			}
 
-			if (opcode == op_callk)
-				debugN(" %s[%x]", (param_value < kernel->_kernelFuncs.size()) ?
+			if (opcode == op_callk) {
+				debugN("\t%s[%x],", (param_value < kernel->_kernelFuncs.size()) ?
 							((param_value < kernel->getKernelNamesSize()) ? kernel->getKernelName(param_value).c_str() : "[Unknown(postulated)]")
 							: "<invalid>", param_value);
-			else
-				debugN(opsize ? " %02x" : " %04x", param_value);
+			} else if (opcode == op_super) {
+				Object *obj;
+				if (objAddr != NULL_REG && (obj = s->_segMan->getObject(objAddr)) != nullptr) {
+					debugN("\t%s", s->_segMan->getObjectName(obj->getSuperClassSelector()));
+					debugN(opsize ? "[%02x]" : "[%04x]", param_value);
+				} else {
+					debugN(opsize ? "\t%02x" : "\t%04x", param_value);
+				}
+
+				debugN(",");
+			} else {
+				const char *separator = defaultSeparator;
+
+				debugN(opsize ? "\t%02x" : "\t%04x", param_value);
+				if (param_value > 9) {
+					debugN("%s%u", separator, param_value);
+					separator = ", ";
+				}
+
+				if (param_value >= 0x20 && param_value <= 0x7e) {
+					debugN("%s'%c'", separator, param_value);
+					separator = ", ";
+				}
+
+				if (opcode == op_pushi && param_value < kernel->getSelectorNamesSize()) {
+					debugN("%s%s", separator, kernel->getSelectorName(param_value).c_str());
+				}
+			}
 
 			break;
 
@@ -183,19 +216,27 @@ reg_t disassemble(EngineState *s, reg32_t pos, bool printBWTag, bool printByteco
 				param_value = READ_SCI11ENDIAN_UINT16(&scr[retval.getOffset()]);
 				retval.incOffset(2);
 			}
-			debugN(opsize ? " %02x" : " %04x", param_value);
+
+			if (opcode == op_lofsa || opcode == op_lofss) {
+				reg_t addr = make_reg(pos.getSegment(), findOffset(param_value, script_entity, pos.getOffset()));
+				debugN("\t%s", s->_segMan->getObjectName(addr));
+				debugN(opsize ? "[%02x]" : "[%04x]", param_value);
+			} else {
+				debugN(opsize ? "\t%02x" : "\t%04x", param_value);
+			}
+
 			break;
 
 		case Script_SRelative:
 			if (opsize) {
 				int8 offset = (int8)scr[retval.getOffset()];
 				retval.incOffset(1);
-				debugN(" %02x  [%04x]", 0xff & offset, 0xffff & (retval.getOffset() + offset));
+				debugN("\t%02x  [%04x]", 0xff & offset, 0xffff & (retval.getOffset() + offset));
 			}
 			else {
 				int16 offset = (int16)READ_SCI11ENDIAN_UINT16(&scr[retval.getOffset()]);
 				retval.incOffset(2);
-				debugN(" %04x  [%04x]", 0xffff & offset, 0xffff & (retval.getOffset() + offset));
+				debugN("\t%04x  [%04x]", 0xffff & offset, 0xffff & (retval.getOffset() + offset));
 			}
 			break;
 
@@ -396,7 +437,7 @@ void SciEngine::scriptDebug() {
 	}
 
 	debugN("Step #%d\n", s->scriptStepCounter);
-	disassemble(s, s->xs->addr.pc, false, true);
+	disassemble(s, s->xs->addr.pc, s->xs->objp, false, true);
 
 	if (_debugState.runningStep) {
 		_debugState.runningStep--;
@@ -499,7 +540,7 @@ void Kernel::dumpScriptClass(char *data, int seeker, int objsize) {
 
 void Kernel::dissectScript(int scriptNumber, Vocabulary *vocab) {
 	int objectctr[11] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-	unsigned int _seeker = 0;
+	uint32 _seeker = 0;
 	Resource *script = _resMan->findResource(ResourceId(kResourceTypeScript, scriptNumber), 0);
 
 	if (!script) {
@@ -510,11 +551,11 @@ void Kernel::dissectScript(int scriptNumber, Vocabulary *vocab) {
 	while (_seeker < script->size) {
 		int objType = (int16)READ_SCI11ENDIAN_UINT16(script->data + _seeker);
 		int objsize;
-		unsigned int seeker = _seeker + 4;
+		uint32 seeker = _seeker + 4;
 
 		if (!objType) {
 			debugN("End of script object (#0) encountered.\n");
-			debugN("Classes: %i, Objects: %i, Export: %i,\n Var: %i (all base 10)",
+			debugN("Classes: %i, Objects: %i, Export: %i,\n Var: %i (all base 10)\n",
 			          objectctr[6], objectctr[1], objectctr[7], objectctr[10]);
 			return;
 		}
@@ -527,7 +568,8 @@ void Kernel::dissectScript(int scriptNumber, Vocabulary *vocab) {
 
 		_seeker += objsize;
 
-		objectctr[objType]++;
+		if (objType >= 0 && objType < ARRAYSIZE(objectctr))
+			objectctr[objType]++;
 
 		switch (objType) {
 		case SCI_OBJ_OBJECT:
@@ -556,8 +598,12 @@ void Kernel::dissectScript(int scriptNumber, Vocabulary *vocab) {
 		case SCI_OBJ_STRINGS:
 			debugN("Strings\n");
 			while (script->data [seeker]) {
-				debugN("%04x: %s\n", seeker, script->data + seeker);
-				seeker += strlen((char *)script->data + seeker) + 1;
+				debugN("%04x: %s", seeker, script->data + seeker);
+				seeker += Common::strnlen((char *)script->data + seeker, script->size - seeker) + 1;
+				if (seeker > script->size) {
+					debugN("[TRUNCATED]");
+				}
+				debugN("\n");
 			}
 			seeker++; // the ending zero byte
 			break;
@@ -603,7 +649,7 @@ bool SciEngine::checkSelectorBreakpoint(BreakpointType breakpointType, reg_t sen
 	Common::List<Breakpoint>::const_iterator bpIter;
 	for (bpIter = _debugState._breakpoints.begin(); bpIter != _debugState._breakpoints.end(); ++bpIter) {
 		if ((*bpIter).type == breakpointType && (*bpIter).name == methodName) {
-			_console->DebugPrintf("Break on %s (in [%04x:%04x])\n", methodName.c_str(), PRINT_REG(send_obj));
+			_console->debugPrintf("Break on %s (in [%04x:%04x])\n", methodName.c_str(), PRINT_REG(send_obj));
 			_debugState.debugging = true;
 			_debugState.breakpointWasHit = true;
 			return true;
@@ -619,7 +665,23 @@ bool SciEngine::checkExportBreakpoint(uint16 script, uint16 pubfunct) {
 		Common::List<Breakpoint>::const_iterator bp;
 		for (bp = _debugState._breakpoints.begin(); bp != _debugState._breakpoints.end(); ++bp) {
 			if (bp->type == BREAK_EXPORT && bp->address == bpaddress) {
-				_console->DebugPrintf("Break on script %d, export %d\n", script, pubfunct);
+				_console->debugPrintf("Break on script %d, export %d\n", script, pubfunct);
+				_debugState.debugging = true;
+				_debugState.breakpointWasHit = true;
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+bool SciEngine::checkAddressBreakpoint(const reg32_t &address) {
+	if (_debugState._activeBreakpointTypes & BREAK_ADDRESS) {
+		Common::List<Breakpoint>::const_iterator bp;
+		for (bp = _debugState._breakpoints.begin(); bp != _debugState._breakpoints.end(); ++bp) {
+			if (bp->type == BREAK_ADDRESS && bp->regAddress == address) {
+				_console->debugPrintf("Break at %04x:%04x\n", PRINT_REG(address));
 				_debugState.debugging = true;
 				_debugState.breakpointWasHit = true;
 				return true;
@@ -665,12 +727,12 @@ void debugSelectorCall(reg_t send_obj, Selector selector, int argc, StackPtr arg
 			reg_t selectorValue = *varp.getPointer(segMan);
 			if (!argc && (activeBreakpointTypes & BREAK_SELECTORREAD)) {
 				if (g_sci->checkSelectorBreakpoint(BREAK_SELECTORREAD, send_obj, selector))
-					con->DebugPrintf("Read from selector (%s:%s): %04x:%04x\n",
+					con->debugPrintf("Read from selector (%s:%s): %04x:%04x\n",
 							objectName, selectorName,
 							PRINT_REG(selectorValue));
 			} else if (argc && (activeBreakpointTypes & BREAK_SELECTORWRITE)) {
 				if (g_sci->checkSelectorBreakpoint(BREAK_SELECTORWRITE, send_obj, selector))
-					con->DebugPrintf("Write to selector (%s:%s): change %04x:%04x to %04x:%04x\n",
+					con->debugPrintf("Write to selector (%s:%s): change %04x:%04x to %04x:%04x\n",
 							objectName, selectorName,
 							PRINT_REG(selectorValue), PRINT_REG(argp[1]));
 			}
@@ -689,13 +751,13 @@ void debugSelectorCall(reg_t send_obj, Selector selector, int argc, StackPtr arg
 			if (true) {
 				if (true) {
 #endif
-					con->DebugPrintf("%s::%s(", objectName, selectorName);
+					con->debugPrintf("%s::%s(", objectName, selectorName);
 					for (int i = 0; i < argc; i++) {
-						con->DebugPrintf("%04x:%04x", PRINT_REG(argp[i+1]));
+						con->debugPrintf("%04x:%04x", PRINT_REG(argp[i+1]));
 						if (i + 1 < argc)
-							con->DebugPrintf(", ");
+							con->debugPrintf(", ");
 					}
-					con->DebugPrintf(") at %04x:%04x\n", PRINT_REG(funcp));
+					con->debugPrintf(") at %04x:%04x\n", PRINT_REG(funcp));
 				}
 			}
 		break;
@@ -736,37 +798,39 @@ void logKernelCall(const KernelFunction *kernelCall, const KernelSubFunction *ke
 			case SIG_TYPE_REFERENCE:
 			{
 				SegmentObj *mobj = s->_segMan->getSegmentObj(argv[parmNr].getSegment());
-				switch (mobj->getType()) {
-				case SEG_TYPE_HUNK:
-				{
-					HunkTable *ht = (HunkTable *)mobj;
-					int index = argv[parmNr].getOffset();
-					if (ht->isValidEntry(index)) {
-						// NOTE: This ", deleted" isn't as useful as it could
-						// be because it prints the status _after_ the kernel
-						// call.
-						debugN(" ('%s' hunk%s)", ht->_table[index].type, ht->_table[index].mem ? "" : ", deleted");
-					} else
-						debugN(" (INVALID hunk ref)");
-					break;
-				}
-				default:
-					// TODO: Any other segment types which could
-					// use special handling?
-
-					if (kernelCall->function == kSaid) {
-						SegmentRef saidSpec = s->_segMan->dereference(argv[parmNr]);
-						if (saidSpec.isRaw) {
-							debugN(" ('");
-							g_sci->getVocabulary()->debugDecipherSaidBlock(saidSpec.raw);
-							debugN("')");
-						} else {
-							debugN(" (non-raw said-spec)");
-						}
-					} else {
-						debugN(" ('%s')", s->_segMan->getString(argv[parmNr]).c_str());
+				if (mobj) {
+					switch (mobj->getType()) {
+					case SEG_TYPE_HUNK:
+					{
+						HunkTable &ht = *(HunkTable *)mobj;
+						int index = argv[parmNr].getOffset();
+						if (ht.isValidEntry(index)) {
+							// NOTE: This ", deleted" isn't as useful as it could
+							// be because it prints the status _after_ the kernel
+							// call.
+							debugN(" ('%s' hunk%s)", ht[index].type, ht[index].mem ? "" : ", deleted");
+						} else
+							debugN(" (INVALID hunk ref)");
+						break;
 					}
-					break;
+					default:
+						// TODO: Any other segment types which could
+						// use special handling?
+
+						if (kernelCall->function == kSaid) {
+							SegmentRef saidSpec = s->_segMan->dereference(argv[parmNr]);
+							if (saidSpec.isRaw) {
+								debugN(" ('");
+								g_sci->getVocabulary()->debugDecipherSaidBlock(saidSpec.raw);
+								debugN("')");
+							} else {
+								debugN(" (non-raw said-spec)");
+							}
+						} else {
+							debugN(" ('%s')", s->_segMan->getString(argv[parmNr]).c_str());
+						}
+						break;
+					}
 				}
 			}
 			default:

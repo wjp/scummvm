@@ -1,5 +1,5 @@
 /* Copyright (C) 2003, 2004, 2005, 2006, 2008, 2009 Dean Beeler, Jerome Fisher
- * Copyright (C) 2011 Dean Beeler, Jerome Fisher, Sergey V. Mikayev
+ * Copyright (C) 2011-2016 Dean Beeler, Jerome Fisher, Sergey V. Mikayev
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Lesser General Public License as published by
@@ -18,16 +18,20 @@
 #ifndef MT32EMU_TABLES_H
 #define MT32EMU_TABLES_H
 
+#include "globals.h"
+#include "Types.h"
+
 namespace MT32Emu {
 
-const int MIDDLEC = 60;
-
-class Synth;
-
 class Tables {
-	bool initialised;
+private:
+	Tables();
+	Tables(Tables &);
+	~Tables() {}
 
 public:
+	static const Tables &getInstance();
+
 	// Constant LUTs
 
 	// CONFIRMED: This is used to convert several parameters to amp-modifying values in the TVA envelope:
@@ -47,18 +51,12 @@ public:
 	// CONFIRMED:
 	Bit8u pulseWidth100To255[101];
 
-	float pulseLenFactor[128];
-	float pitchToFreq[65536];
-	float cutoffToCosineLen[1024];
-	float cutoffToFilterAmp[1024];
-	float resAmpMax[32];
-	float resAmpFadeFactor[8];
-	float sinf10[5120];
+	Bit16u exp9[512];
+	Bit16u logsin9[512];
 
-	Tables();
-	void init();
-};
+	const Bit8u *resAmpDecayFactor;
+}; // class Tables
 
-}
+} // namespace MT32Emu
 
-#endif
+#endif // #ifndef MT32EMU_TABLES_H

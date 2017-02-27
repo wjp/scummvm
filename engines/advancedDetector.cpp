@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -29,7 +29,7 @@
 #include "common/system.h"
 #include "common/textconsole.h"
 #include "common/translation.h"
-
+#include "gui/EventRecorder.h"
 #include "engines/advancedDetector.h"
 #include "engines/obsolete.h"
 
@@ -41,8 +41,8 @@ static GameDescriptor toGameDescriptor(const ADGameDescription &g, const PlainGa
 		title = g.extra;
 		extra = "";
 	} else {
-		while (sg->gameid) {
-			if (!scumm_stricmp(g.gameid, sg->gameid))
+		while (sg->gameId) {
+			if (!scumm_stricmp(g.gameId, sg->gameId))
 				title = sg->description;
 			sg++;
 		}
@@ -56,7 +56,7 @@ static GameDescriptor toGameDescriptor(const ADGameDescription &g, const PlainGa
 	else if (g.flags & ADGF_TESTING)
 		gsl = kTestingGame;
 
-	GameDescriptor gd(g.gameid, title, g.language, g.platform, 0, gsl);
+	GameDescriptor gd(g.gameId, title, g.language, g.platform, 0, gsl);
 	gd.updateDesc(extra);
 	return gd;
 }
@@ -78,7 +78,7 @@ static Common::String generatePreferredTarget(const Common::String &id, const AD
 		res = res + "-cd";
 	}
 
-	if (desc->platform != Common::kPlatformPC && desc->platform != Common::kPlatformUnknown) {
+	if (desc->platform != Common::kPlatformDOS && desc->platform != Common::kPlatformUnknown && !(desc->flags & ADGF_DROPPLATFORM)) {
 		res = res + "-" + getPlatformAbbrev(desc->platform);
 	}
 
@@ -89,21 +89,38 @@ static Common::String generatePreferredTarget(const Common::String &id, const AD
 	return res;
 }
 
+static Common::String sanitizeName(const char *name) {
+	Common::String res;
+
+	while (*name) {
+		if (Common::isAlnum(*name))
+			res += tolower(*name);
+		name++;
+	}
+
+	return res;
+}
+
 void AdvancedMetaEngine::updateGameDescriptor(GameDescriptor &desc, const ADGameDescription *realDesc) const {
-	if (_singleid != NULL) {
+	if (_singleId != NULL) {
 		desc["preferredtarget"] = desc["gameid"];
-		desc["gameid"] = _singleid;
+		desc["gameid"] = _singleId;
 	}
 
 	if (!desc.contains("preferredtarget"))
 		desc["preferredtarget"] = desc["gameid"];
+
+	if (realDesc->flags & ADGF_AUTOGENTARGET) {
+		if (*realDesc->extra)
+			desc["preferredtarget"] = sanitizeName(realDesc->extra);
+	}
 
 	desc["preferredtarget"] = generatePreferredTarget(desc["preferredtarget"], realDesc);
 
 	if (_flags & kADFlagUseExtraAsHint)
 		desc["extra"] = realDesc->extra;
 
-	desc.setGUIOptions(realDesc->guioptions + _guioptions);
+	desc.setGUIOptions(realDesc->guiOptions + _guiOptions);
 	desc.appendGUIOptions(getGameGUIOptionsDescriptionLanguage(realDesc->language));
 
 	if (realDesc->flags & ADGF_ADDENGLISH)
@@ -122,7 +139,7 @@ bool cleanupPirated(ADGameDescList &matched) {
 
 		// We ruled out all variants and now have nothing
 		if (matched.empty()) {
-			warning("Illegitimate game copy detected. We give no support in such cases %d", matched.size());
+			warning("Illegitimate game copy detected. We provide no support in such cases");
 			return true;
 		}
 	}
@@ -149,7 +166,7 @@ GameList AdvancedMetaEngine::detectGames(const Common::FSList &fslist) const {
 		// Use fallback detector if there were no matches by other means
 		const ADGameDescription *fallbackDesc = fallbackDetect(allFiles, fslist);
 		if (fallbackDesc != 0) {
-			GameDescriptor desc(toGameDescriptor(*fallbackDesc, _gameids));
+			GameDescriptor desc(toGameDescriptor(*fallbackDesc, _gameIds));
 			updateGameDescriptor(desc, fallbackDesc);
 			detectedGames.push_back(desc);
 		}
@@ -157,7 +174,7 @@ GameList AdvancedMetaEngine::detectGames(const Common::FSList &fslist) const {
 		// Otherwise use the found matches
 		cleanupPirated(matches);
 		for (uint i = 0; i < matches.size(); i++) {
-			GameDescriptor desc(toGameDescriptor(*matches[i], _gameids));
+			GameDescriptor desc(toGameDescriptor(*matches[i], _gameIds));
 			updateGameDescriptor(desc, matches[i]);
 			detectedGames.push_back(desc);
 		}
@@ -252,10 +269,10 @@ Common::Error AdvancedMetaEngine::createInstance(OSystem *syst, Engine **engine)
 	if (cleanupPirated(matches))
 		return Common::kNoGameDataFoundError;
 
-	if (_singleid == NULL) {
+	if (_singleId == NULL) {
 		// Find the first match with correct gameid.
 		for (uint i = 0; i < matches.size(); i++) {
-			if (matches[i]->gameid == gameid) {
+			if (matches[i]->gameId == gameid) {
 				agdDesc = matches[i];
 				break;
 			}
@@ -270,7 +287,7 @@ Common::Error AdvancedMetaEngine::createInstance(OSystem *syst, Engine **engine)
 		if (agdDesc != 0) {
 			// Seems we found a fallback match. But first perform a basic
 			// sanity check: the gameid must match.
-			if (_singleid == NULL && agdDesc->gameid != gameid)
+			if (_singleId == NULL && agdDesc->gameId != gameid)
 				agdDesc = 0;
 		}
 	}
@@ -284,9 +301,9 @@ Common::Error AdvancedMetaEngine::createInstance(OSystem *syst, Engine **engine)
 	if (agdDesc->flags & ADGF_ADDENGLISH)
 		lang += " " + getGameGUIOptionsDescriptionLanguage(Common::EN_ANY);
 
-	Common::updateGameGUIOptions(agdDesc->guioptions + _guioptions, lang);
+	Common::updateGameGUIOptions(agdDesc->guiOptions + _guiOptions, lang);
 
-	GameDescriptor gameDescriptor = toGameDescriptor(*agdDesc, _gameids);
+	GameDescriptor gameDescriptor = toGameDescriptor(*agdDesc, _gameIds);
 
 	bool showTestingWarning = false;
 
@@ -301,6 +318,7 @@ Common::Error AdvancedMetaEngine::createInstance(OSystem *syst, Engine **engine)
 		return Common::kUserCanceled;
 
 	debug(2, "Running %s", gameDescriptor.description().c_str());
+	initSubSystems(agdDesc);
 	if (!createInstance(syst, engine, agdDesc))
 		return Common::kNoGameDataFoundError;
 	else
@@ -313,10 +331,10 @@ void AdvancedMetaEngine::reportUnknown(const Common::FSNode &path, const ADFileP
 	//
 	// Might also be helpful to display the full path (for when this is used
 	// from the mass detector).
-	Common::String report = Common::String::format(_("The game in '%s' seems to be unknown."), path.getPath().c_str()) + "\n";
-	report += _("Please, report the following data to the ScummVM team along with name");
-	report += "\n";
-	report += _("of the game you tried to add and its version/language/etc.:");
+	Common::String report = Common::String::format(
+			_("The game in '%s' seems to be unknown.\n"
+			  "Please, report the following data to the ScummVM team along with name\n"
+			  "of the game you tried to add and its version, language, etc.:"), path.getPath().c_str()) + "\n";
 	report += "\n";
 
 	for (ADFilePropertiesMap::const_iterator file = filesProps.begin(); file != filesProps.end(); ++file)
@@ -379,7 +397,9 @@ bool AdvancedMetaEngine::getFileProperties(const Common::FSNode &parent, const F
 
 		fileProps.md5 = macResMan.computeResForkMD5AsString(_md5Bytes);
 		fileProps.size = macResMan.getResForkDataSize();
-		return true;
+
+		if (fileProps.size != 0)
+			return true;
 	}
 
 	if (!allFiles.contains(fname))
@@ -406,7 +426,7 @@ ADGameDescList AdvancedMetaEngine::detectGame(const Common::FSNode &parent, cons
 
 	// Check which files are included in some ADGameDescription *and* are present.
 	// Compute MD5s and file sizes for these files.
-	for (descPtr = _gameDescriptors; ((const ADGameDescription *)descPtr)->gameid != 0; descPtr += _descItemSize) {
+	for (descPtr = _gameDescriptors; ((const ADGameDescription *)descPtr)->gameId != 0; descPtr += _descItemSize) {
 		g = (const ADGameDescription *)descPtr;
 
 		for (fileDesc = g->filesDescriptions; fileDesc->fileName; fileDesc++) {
@@ -429,7 +449,7 @@ ADGameDescList AdvancedMetaEngine::detectGame(const Common::FSNode &parent, cons
 
 	// MD5 based matching
 	uint i;
-	for (i = 0, descPtr = _gameDescriptors; ((const ADGameDescription *)descPtr)->gameid != 0; descPtr += _descItemSize, ++i) {
+	for (i = 0, descPtr = _gameDescriptors; ((const ADGameDescription *)descPtr)->gameId != 0; descPtr += _descItemSize, ++i) {
 		g = (const ADGameDescription *)descPtr;
 		bool fileMissing = false;
 
@@ -486,7 +506,7 @@ ADGameDescList AdvancedMetaEngine::detectGame(const Common::FSNode &parent, cons
 			gotAnyMatchesWithAllFiles = true;
 
 		if (!fileMissing) {
-			debug(2, "Found game: %s (%s %s/%s) (%d)", g->gameid, g->extra,
+			debug(2, "Found game: %s (%s %s/%s) (%d)", g->gameId, g->extra,
 			 getPlatformDescription(g->platform), getLanguageDescription(g->language), i);
 
 			if (curFilesMatched > maxFilesMatched) {
@@ -502,7 +522,7 @@ ADGameDescList AdvancedMetaEngine::detectGame(const Common::FSNode &parent, cons
 			}
 
 		} else {
-			debug(5, "Skipping game: %s (%s %s/%s) (%d)", g->gameid, g->extra,
+			debug(5, "Skipping game: %s (%s %s/%s) (%d)", g->gameId, g->extra,
 			 getPlatformDescription(g->platform), getLanguageDescription(g->language), i);
 		}
 	}
@@ -542,7 +562,7 @@ const ADGameDescription *AdvancedMetaEngine::detectGameFilebased(const FileMap &
 		}
 
 		if (!fileMissing) {
-			debug(4, "Matched: %s", agdesc->gameid);
+			debug(4, "Matched: %s", agdesc->gameId);
 
 			if (numMatchedFiles > maxNumMatchedFiles) {
 				matchedDesc = agdesc;
@@ -567,27 +587,27 @@ const ADGameDescription *AdvancedMetaEngine::detectGameFilebased(const FileMap &
 }
 
 GameList AdvancedMetaEngine::getSupportedGames() const {
-	if (_singleid != NULL) {
+	if (_singleId != NULL) {
 		GameList gl;
 
-		const PlainGameDescriptor *g = _gameids;
-		while (g->gameid) {
-			if (0 == scumm_stricmp(_singleid, g->gameid)) {
-				gl.push_back(GameDescriptor(g->gameid, g->description));
+		const PlainGameDescriptor *g = _gameIds;
+		while (g->gameId) {
+			if (0 == scumm_stricmp(_singleId, g->gameId)) {
+				gl.push_back(GameDescriptor(g->gameId, g->description));
 
 				return gl;
 			}
 			g++;
 		}
-		error("Engine %s doesn't have its singleid specified in ids list", _singleid);
+		error("Engine %s doesn't have its singleid specified in ids list", _singleId);
 	}
 
-	return GameList(_gameids);
+	return GameList(_gameIds);
 }
 
-GameDescriptor AdvancedMetaEngine::findGame(const char *gameid) const {
+GameDescriptor AdvancedMetaEngine::findGame(const char *gameId) const {
 	// First search the list of supported gameids for a match.
-	const PlainGameDescriptor *g = findPlainGameDescriptor(gameid, _gameids);
+	const PlainGameDescriptor *g = findPlainGameDescriptor(gameId, _gameIds);
 	if (g)
 		return GameDescriptor(*g);
 
@@ -595,14 +615,22 @@ GameDescriptor AdvancedMetaEngine::findGame(const char *gameid) const {
 	return GameDescriptor();
 }
 
-AdvancedMetaEngine::AdvancedMetaEngine(const void *descs, uint descItemSize, const PlainGameDescriptor *gameids, const ADExtraGuiOptionsMap *extraGuiOptions)
-	: _gameDescriptors((const byte *)descs), _descItemSize(descItemSize), _gameids(gameids),
+AdvancedMetaEngine::AdvancedMetaEngine(const void *descs, uint descItemSize, const PlainGameDescriptor *gameIds, const ADExtraGuiOptionsMap *extraGuiOptions)
+	: _gameDescriptors((const byte *)descs), _descItemSize(descItemSize), _gameIds(gameIds),
 	  _extraGuiOptions(extraGuiOptions) {
 
 	_md5Bytes = 5000;
-	_singleid = NULL;
+	_singleId = NULL;
 	_flags = 0;
-	_guioptions = GUIO_NONE;
+	_guiOptions = GUIO_NONE;
 	_maxScanDepth = 1;
 	_directoryGlobs = NULL;
+}
+
+void AdvancedMetaEngine::initSubSystems(const ADGameDescription *gameDesc) const {
+#ifdef ENABLE_EVENTRECORDER
+	if (gameDesc) {
+		g_eventRec.processGameDescription(gameDesc);
+	}
+#endif
 }

@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -84,7 +84,10 @@ enum ResourceType {
 	kResourceTypePatch,
 	kResourceTypeBitmap,
 	kResourceTypePalette,
-	kResourceTypeCdAudio,
+	kResourceTypeCdAudio = 12,
+#ifdef ENABLE_SCI32
+	kResourceTypeWave = 12,
+#endif
 	kResourceTypeAudio,
 	kResourceTypeSync,
 	kResourceTypeMessage,
@@ -111,6 +114,8 @@ enum ResourceType {
 	kResourceTypeMacIconBarPictN, // IBIN resources (icon bar, not selected)
 	kResourceTypeMacIconBarPictS, // IBIS resources (icon bar, selected)
 	kResourceTypeMacPict,        // PICT resources (inventory)
+
+	kResourceTypeRave,	// KQ6 hires RAVE (special sync) resources
 
 	kResourceTypeInvalid
 };
@@ -143,6 +148,19 @@ class ResourceId {
 	uint16 _number;
 	uint32 _tuple; // Only used for audio36 and sync36
 
+	static Common::String intToBase36(uint32 number, int minChar) {
+		// Convert from an integer to a base36 string
+		Common::String string;
+
+		while (minChar--) {
+			int character = number % 36;
+			string = ((character < 10) ? (character + '0') : (character + 'A' - 10)) + string;
+			number /= 36;
+		}
+
+		return string;
+	}
+
 public:
 	ResourceId() : _type(kResourceTypeInvalid), _number(0), _tuple(0) { }
 
@@ -156,17 +174,29 @@ public:
 	}
 
 	Common::String toString() const {
-		char buf[32];
-
-		snprintf(buf, 32, "%s.%d", getResourceTypeName(_type), _number);
-		Common::String retStr = buf;
+		Common::String retStr = Common::String::format("%s.%d", getResourceTypeName(_type), _number);
 
 		if (_tuple != 0) {
-			snprintf(buf, 32, "(%d, %d, %d, %d)", _tuple >> 24, (_tuple >> 16) & 0xff, (_tuple >> 8) & 0xff, _tuple & 0xff);
-			retStr += buf;
+			retStr += Common::String::format("(%d, %d, %d, %d)", _tuple >> 24, (_tuple >> 16) & 0xff, (_tuple >> 8) & 0xff, _tuple & 0xff);
 		}
 
 		return retStr;
+	}
+
+	// Convert from a resource ID to a base36 patch name
+	Common::String toPatchNameBase36() {
+		Common::String output;
+
+		output += (getType() == kResourceTypeAudio36) ? '@' : '#'; // Identifier
+		output += intToBase36(getNumber(), 3);                     // Map
+		output += intToBase36(getTuple() >> 24, 2);                // Noun
+		output += intToBase36((getTuple() >> 16) & 0xff, 2);       // Verb
+		output += '.';                                                   // Separator
+		output += intToBase36((getTuple() >> 8) & 0xff, 2);        // Cond
+		output += intToBase36(getTuple() & 0xff, 1);               // Seq
+
+		assert(output.size() == 12); // We should always get 12 characters in the end
+		return output;
 	}
 
 	inline ResourceType getType() const { return _type; }
@@ -179,6 +209,10 @@ public:
 
 	bool operator==(const ResourceId &other) const {
 		return (_type == other._type) && (_number == other._number) && (_tuple == other._tuple);
+	}
+
+	bool operator!=(const ResourceId &other) const {
+		return !operator==(other);
 	}
 
 	bool operator<(const ResourceId &other) const {
@@ -228,6 +262,10 @@ public:
 	 */
 	void writeToStream(Common::WriteStream *stream) const;
 
+#ifdef ENABLE_SCI32
+	Common::SeekableReadStream *makeStream() const;
+#endif
+
 	const Common::String &getResourceLocation() const;
 
 	// FIXME: This audio specific method is a hack. After all, why should a
@@ -254,6 +292,7 @@ protected:
 
 typedef Common::HashMap<ResourceId, Resource *, ResourceIdHash> ResourceMap;
 
+class IntMapResourceSource;
 class ResourceManager {
 	// FIXME: These 'friend' declarations are meant to be a temporary hack to
 	// ease transition to the ResourceSource class system.
@@ -281,10 +320,17 @@ public:
 	/**
 	 * Initializes the resource manager.
 	 */
-	void init(bool initFromFallbackDetector = false);
+	void init();
 
+	/**
+	 * Adds all of the resource files for a game
+	 */
 	int addAppropriateSources();
-	int addAppropriateSources(const Common::FSList &fslist);	// TODO: Switch from FSList to Common::Archive?
+
+	/**
+	 * Similar to the function above, only called from the fallback detector
+	 */
+	int addAppropriateSourcesForDetection(const Common::FSList &fslist);	// TODO: Switch from FSList to Common::Archive?
 
 	/**
 	 * Looks up a resource's data.
@@ -326,7 +372,7 @@ public:
 
 	void setAudioLanguage(int language);
 	int getAudioLanguage() const;
-	void changeAudioDirectory(Common::String path);
+	void changeAudioDirectory(const Common::String &path);
 	bool isGMTrackIncluded();
 	bool isSci11Mac() const { return _volVersion == kResVersionSci11Mac; }
 	ViewType getViewType() const { return _viewType; }
@@ -348,9 +394,32 @@ public:
 	 * resource manager.
 	 */
 	void addResourcesFromChunk(uint16 id);
+
+	/**
+	 * Updates the currently active disc number.
+	 */
+	void findDisc(const int16 discNo);
+
+	/**
+	 * Gets the currently active disc number.
+	 */
+	int16 getCurrentDiscNo() const { return _currentDiscNo; }
+
+private:
+	/**
+	 * The currently active disc number.
+	 */
+	int16 _currentDiscNo;
+
+	/**
+	 * If true, the game has multiple audio volumes that contain different
+	 * audio files for each disc.
+	 */
+	bool _multiDiscAudio;
+
+public:
 #endif
 
-	bool detectHires();
 	// Detects, if standard font of current game includes extended characters (>0x80)
 	bool detectFontExtended();
 	// Detects, if SCI1.1 game uses palette merging
@@ -383,9 +452,7 @@ protected:
 	// Note: maxMemory will not be interpreted as a hard limit, only as a restriction
 	// for resources which are not explicitly locked. However, a warning will be
 	// issued whenever this limit is exceeded.
-	enum {
-		MAX_MEMORY = 256 * 1024	// 256KB
-	};
+	int _maxMemoryLRU;
 
 	ViewType _viewType; // Used to determine if the game has EGA or VGA graphics
 	Common::List<ResourceSource *> _sources;
@@ -473,7 +540,7 @@ protected:
 	 * @param map The map
 	 * @return 0 on success, an SCI_ERROR_* code otherwise
 	 */
-	int readAudioMapSCI11(ResourceSource *map);
+	int readAudioMapSCI11(IntMapResourceSource *map);
 
 	/**
 	 * Reads SCI1 audio map files.
@@ -498,7 +565,7 @@ protected:
 	void readWaveAudioPatches();
 	void processWavePatch(ResourceId resourceId, Common::String name);
 
- 	/**
+	/**
 	 * Applies to all versions before 0.000.395 (i.e. KQ4 old, XMAS 1988 and LSL2).
 	 * Old SCI versions used two word header for script blocks (first word equal
 	 * to 0x82, meaning of the second one unknown). New SCI versions used one
@@ -516,6 +583,8 @@ protected:
 	ViewType detectViewType();
 	bool hasSci0Voc999();
 	bool hasSci1Voc900();
+	bool checkResourceDataForSignature(Resource *resource, const byte *signature);
+	bool checkResourceForSignatures(ResourceType resourceType, uint16 resourceNr, const byte *signature1, const byte *signature2);
 	void detectSciVersion();
 };
 
@@ -523,6 +592,7 @@ class SoundResource {
 public:
 	struct Channel {
 		byte number;
+		byte flags;
 		byte poly;
 		uint16 prio;
 		uint16 size;
@@ -552,6 +622,7 @@ public:
 	Track *getDigitalTrack();
 	int getChannelFilterMask(int hardwareMask, bool wantsRhythm);
 	byte getInitialVoiceCount(byte channel);
+	byte getSoundPriority() const { return _soundPriority; }
 
 private:
 	SciVersion _soundVersion;
@@ -559,6 +630,7 @@ private:
 	Track *_tracks;
 	Resource *_innerResource;
 	ResourceManager *_resMan;
+	byte _soundPriority;
 };
 
 } // End of namespace Sci

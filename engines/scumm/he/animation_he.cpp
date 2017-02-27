@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -22,15 +22,20 @@
 
 #ifdef ENABLE_HE
 
+#include "common/scummsys.h"
+
 #include "scumm/he/animation_he.h"
 #include "scumm/he/intern_he.h"
 
-#include "audio/audiostream.h"
 #include "video/smk_decoder.h"
 
 #ifdef USE_BINK
 #include "video/bink_decoder.h"
 #endif
+
+namespace Audio {
+class Mixer;
+}
 
 namespace Scumm {
 
@@ -57,7 +62,7 @@ int MoviePlayer::getImageNum() {
 	return _wizResNum;
 }
 
-int MoviePlayer::load(const char *filename, int flags, int image) {
+int MoviePlayer::load(const Common::String &filename, int flags, int image) {
 	if (_video->isVideoLoaded())
 		_video->close();
 
@@ -65,13 +70,13 @@ int MoviePlayer::load(const char *filename, int flags, int image) {
 	_video->setDefaultHighColorFormat(g_system->getScreenFormat());
 
 	if (!_video->loadFile(filename)) {
-		warning("Failed to load video file %s", filename);
+		warning("Failed to load video file %s", filename.c_str());
 		return -1;
 	}
 
 	_video->start();
 
-	debug(1, "Playing video %s", filename);
+	debug(1, "Playing video %s", filename.c_str());
 
 	if (flags & 2)
 		_vm->_wiz->createWizEmptyImage(image, 0, 0, _video->getWidth(), _video->getHeight());
@@ -90,7 +95,7 @@ void MoviePlayer::copyFrameToBuffer(byte *dst, int dstType, uint x, uint y, uint
 	if (!surface)
 		return;
 
-	byte *src = (byte *)surface->pixels;
+	const byte *src = (const byte *)surface->getPixels();
 
 	if (_video->hasDirtyPalette())
 		_vm->setPaletteFromPtr(_video->getPalette(), 256);
@@ -119,7 +124,7 @@ void MoviePlayer::copyFrameToBuffer(byte *dst, int dstType, uint x, uint y, uint
 			dst += y * pitch + x * 2;
 			do {
 				for (uint i = 0; i < w; i++) {
-					uint16 color = *((uint16 *)src + i);
+					uint16 color = *((const uint16 *)src + i);
 					switch (dstType) {
 					case kDstScreen:
 						WRITE_UINT16(dst + i * 2, color);

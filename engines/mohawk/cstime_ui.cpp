@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -78,6 +78,8 @@ CSTimeInterface::CSTimeInterface(MohawkEngine_CSTime *vm) : _vm(vm) {
 	_dialogTextFeature = NULL;
 	_rolloverTextFeature = NULL;
 	_bubbleTextFeature = NULL;
+
+	_draggedItem = 0;
 
 	_mouseWasInScene = false;
 	_state = kCSTimeInterfaceStateNormal;
@@ -854,7 +856,7 @@ void CSTimeInterface::dropItemInInventory(uint16 id) {
 	clearDialogArea();
 	_inventoryDisplay->show();
 	_inventoryDisplay->draw();
-	_inventoryDisplay->setState(4);
+	_inventoryDisplay->setState(kCSTimeInterfaceDroppedInventory);
 }
 
 CSTimeHelp::CSTimeHelp(MohawkEngine_CSTime *vm) : _vm(vm) {
@@ -1033,6 +1035,8 @@ CSTimeInventoryDisplay::CSTimeInventoryDisplay(MohawkEngine_CSTime *vm, Common::
 	_state = 0;
 	_cuffsState = false;
 	_cuffsShape = 10;
+
+	_draggedItem = 0;
 
 	_invRect = baseRect;
 

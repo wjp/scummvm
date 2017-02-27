@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -105,7 +105,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -283,7 +283,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_DEMO,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -306,7 +306,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -329,7 +329,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::ES_ESP,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -352,7 +352,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::FR_FRA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -375,7 +375,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -584,7 +584,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -610,7 +610,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -636,7 +636,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -662,7 +662,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::FR_FRA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -688,7 +688,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -714,7 +714,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::IT_ITA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -740,7 +740,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::ES_ESP,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -766,7 +766,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::ES_ESP,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -843,7 +843,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_DEMO,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -872,7 +872,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -901,7 +901,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::FR_FRA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -930,7 +930,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -959,7 +959,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::ES_ESP,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1089,6 +1089,30 @@ static const AGOSGameDescription gameDescriptions[] = {
 		GType_SIMON1,
 		GID_SIMON1,
 		GF_32COLOR | GF_CRUNCHED | GF_CRUNCHED_GAMEPC | GF_OLD_BUNDLE | GF_PLANAR
+	},
+
+	// Simon the Sorcerer 1 - German Amiga OCS Floppy
+	{
+		{
+			"simon1",
+			"OCS Floppy",
+
+			{
+	{ "gameamiga",		GAME_BASEFILE,	"634c82b7a0b760214fd71add328c7a00", 39493},
+	{ "icon.pkd",		GAME_ICONFILE,	"565ef7a98dcc21ef526a2bb10b6f42ed", 18979},
+	{ "stripped.txt",	GAME_STRFILE,	"f5fc67db3b8c5283cda51c43b98a74f8", 243},
+	{ "tbllist",		GAME_TBLFILE,	"f9d5bf2ce09f82289c791c3ca26e1e4b", 696},
+	{ NULL, 0, NULL, 0}
+			},
+			Common::DE_DEU,
+			Common::kPlatformAmiga,
+			ADGF_NO_FLAGS,
+			GUIO2(GUIO_NOSPEECH, GUIO_NOMIDI)
+		},
+
+		GType_SIMON1,
+		GID_SIMON1,
+		GF_32COLOR | GF_CRUNCHED | GF_OLD_BUNDLE | GF_PLANAR
 	},
 
 	// Simon the Sorcerer 1 - English Amiga AGA Floppy
@@ -1235,6 +1259,32 @@ static const AGOSGameDescription gameDescriptions[] = {
 		GF_TALKIE | GF_OLD_BUNDLE | GF_PLANAR
 	},
 
+		// Simon the Sorcerer 1 - English Amiga CD32 demo, from the cover disc of
+		// issue 5 (October 1994) of Amiga CD32 Gamer
+	{
+		{
+			"simon1",
+			"CD32 Demo",
+
+			{
+	{ "gameamiga",		GAME_BASEFILE,	"e243f9229f9728b3476e54d2cf5f18a1", 27998},
+	{ "icon.pkd",		GAME_ICONFILE,	"565ef7a98dcc21ef526a2bb10b6f42ed", 18979},
+	{ "stripped.txt",	GAME_STRFILE,	"94413c71c86c32ed9baaa1c74a151cb3", 243},
+	{ "tbllist",		GAME_TBLFILE,	"f9d5bf2ce09f82289c791c3ca26e1e4b", 696},
+	{ NULL, 0, NULL, 0}
+			},
+			Common::EN_ANY,
+			Common::kPlatformAmiga,
+			ADGF_CD | ADGF_DEMO,
+			GUIO2(GUIO_NOSUBTITLES, GUIO_NOMIDI)
+		},
+
+		GType_SIMON1,
+		GID_SIMON1CD32,
+		GF_TALKIE | GF_OLD_BUNDLE | GF_PLANAR
+	},
+
+
 	// Simon the Sorcerer 1 - English DOS Floppy Demo
 	{
 		{
@@ -1249,7 +1299,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_DEMO,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1273,7 +1323,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1297,7 +1347,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::CZ_CZE,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1321,7 +1371,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::RU_RUS,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1335,7 +1385,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{
 		{
 			"simon1",
-			"Floppy",
+			"Infocom Floppy",
 
 			{
 	{ "gamepc",		GAME_BASEFILE,	"9f93d27432ce44a787eef10adb640870", 37070},
@@ -1345,7 +1395,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1359,7 +1409,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{
 		{
 			"simon1",
-			"Floppy",
+			"Infocom Floppy",
 
 			{
 	{ "gamepc",		GAME_BASEFILE,	"62de24fc579b94fac7d3d23201b65b14", -1},
@@ -1369,7 +1419,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::CZ_CZE,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1393,7 +1443,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::RU_RUS,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1417,7 +1467,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::FR_FRA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1441,7 +1491,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1465,7 +1515,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::IT_ITA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1489,7 +1539,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::ES_ESP,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1514,7 +1564,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_DEMO,
 			GUIO1(GUIO_NOSUBTITLES)
 		},
@@ -1539,7 +1589,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_CD,
 			GUIO1(GUIO_NOSUBTITLES)
 		},
@@ -1549,11 +1599,11 @@ static const AGOSGameDescription gameDescriptions[] = {
 		GF_TALKIE
 	},
 
-	// Simon the Sorcerer 1 - English DOS CD alternate?
+	// Simon the Sorcerer 1 - English DOS CD  (Infocom)
 	{
 		{
 			"simon1",
-			"CD",
+			"Infocom CD",
 
 			{
 	{ "gamepc",		GAME_BASEFILE,	"c0b948b6821d2140f8b977144f21027a", -1},
@@ -1564,7 +1614,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_CD,
 			GUIO1(GUIO_NOSUBTITLES)
 		},
@@ -1589,7 +1639,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::RU_RUS,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_CD,
 			GUIO0()
 		},
@@ -1614,7 +1664,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::FR_FRA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_CD,
 			GUIO0()
 		},
@@ -1639,7 +1689,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSUBTITLES)
 		},
@@ -1664,7 +1714,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::HE_ISR,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_CD,
 			GUIO0()
 		},
@@ -1689,7 +1739,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::IT_ITA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_CD,
 			GUIO0()
 		},
@@ -1740,7 +1790,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::ES_ESP,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_CD,
 			GUIO0()
 		},
@@ -1815,7 +1865,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1840,7 +1890,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::RU_RUS,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1865,7 +1915,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1890,7 +1940,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1915,7 +1965,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::IT_ITA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO1(GUIO_NOSPEECH)
 		},
@@ -1940,7 +1990,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_DEMO,
 			GUIO0()
 		},
@@ -1965,7 +2015,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_DEMO,
 			GUIO0()
 		},
@@ -1990,7 +2040,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_DEMO,
 			GUIO0()
 		},
@@ -2015,7 +2065,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_CD,
 			GUIO0()
 		},
@@ -2040,7 +2090,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_CD,
 			GUIO0()
 		},
@@ -2065,7 +2115,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::FR_FRA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_CD,
 			GUIO0()
 		},
@@ -2090,7 +2140,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_CD,
 			GUIO0()
 		},
@@ -2115,7 +2165,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_CD,
 			GUIO0()
 		},
@@ -2140,7 +2190,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::HE_ISR,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_CD,
 			GUIO0()
 		},
@@ -2191,7 +2241,32 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::ES_ESP,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
+			ADGF_CD,
+			GUIO0()
+		},
+
+		GType_SIMON2,
+		GID_SIMON2,
+		GF_TALKIE
+	},
+
+	// Simon the Sorcerer 2 - Russian DOS CD
+	{
+		{
+			"simon2",
+			"CD",
+
+			{
+	{ "gsptr30",		GAME_BASEFILE,	"e26d162e573587f4601b88701292212c", 58851},
+	{ "icon.dat",		GAME_ICONFILE,	"72096a62d36e6034ea9fecc13b2dbdab", 18089},
+	{ "simon2.gme",		GAME_GMEFILE,	"9c535d403966750ae98bdaf698375a38", 19687892},
+	{ "stripped.txt",	GAME_STRFILE,	"e229f84d46fa83f99b4a7115679f3fb6", 171},
+	{ "tbllist",		GAME_TBLFILE,	"2082f8d02075e590300478853a91ffd9", 513},
+	{ NULL, 0, NULL, 0}
+			},
+			Common::RU_RUS,
+			Common::kPlatformDOS,
 			ADGF_CD,
 			GUIO0()
 		},
@@ -2338,7 +2413,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_DEMO,
 			GUIO3(GUIO_NOSUBTITLES, GUIO_NOMUSIC, GUIO_NOASPECT)
 		},
@@ -2359,7 +2434,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 	{ NULL, 0, NULL, 0}
 			},
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_DEMO,
 			GUIO3(GUIO_NOSUBTITLES, GUIO_NOMUSIC, GUIO_NOASPECT)
 		},
@@ -2598,7 +2673,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 
 		GType_FF,
 		GID_FEEBLEFILES,
-		GF_OLD_BUNDLE | GF_TALKIE | GF_PACKED
+		GF_OLD_BUNDLE | GF_TALKIE | GF_PACKED | GF_BROKEN_FF_RATING
 	},
 
 	// The Feeble Files - English Windows 4CD
@@ -2621,7 +2696,7 @@ static const AGOSGameDescription gameDescriptions[] = {
 
 		GType_FF,
 		GID_FEEBLEFILES,
-		GF_OLD_BUNDLE | GF_TALKIE
+		GF_OLD_BUNDLE | GF_TALKIE | GF_BROKEN_FF_RATING
 	},
 
 	// The Feeble Files - French Windows 4CD

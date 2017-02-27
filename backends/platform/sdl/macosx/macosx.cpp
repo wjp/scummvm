@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -27,10 +27,13 @@
 
 #ifdef MACOSX
 
-#include "backends/platform/sdl/macosx/macosx.h"
+#include "backends/audiocd/macosx/macosx-audiocd.h"
 #include "backends/mixer/doublebuffersdl/doublebuffersdl-mixer.h"
 #include "backends/platform/sdl/macosx/appmenu_osx.h"
+#include "backends/platform/sdl/macosx/macosx.h"
 #include "backends/updates/macosx/macosx-updates.h"
+#include "backends/taskbar/macosx/macosx-taskbar.h"
+#include "backends/platform/sdl/macosx/macosx_wrapper.h"
 
 #include "common/archive.h"
 #include "common/config-manager.h"
@@ -39,11 +42,23 @@
 
 #include "ApplicationServices/ApplicationServices.h"	// for LSOpenFSRef
 #include "CoreFoundation/CoreFoundation.h"	// for CF* stuff
-#include "CoreServices/CoreServices.h"	// for FSPathMakeRef
 
 OSystem_MacOSX::OSystem_MacOSX()
 	:
 	OSystem_POSIX("Library/Preferences/ScummVM Preferences") {
+}
+
+void OSystem_MacOSX::init() {
+	// Use an iconless window on OS X, as we use a nicer external icon there.
+	_window = new SdlIconlessWindow();
+
+#if defined(USE_TASKBAR)
+	// Initialize taskbar manager
+	_taskbarManager = new MacOSXTaskbarManager();
+#endif
+
+	// Invoke parent implementation of this method
+	OSystem_POSIX::init();
 }
 
 void OSystem_MacOSX::initBackend() {
@@ -91,12 +106,8 @@ void OSystem_MacOSX::addSysArchivesToSearchSet(Common::SearchSet &s, int priorit
 	}
 }
 
-void OSystem_MacOSX::setupIcon() {
-	// Don't set icon on OS X, as we use a nicer external icon there.
-}
-
 bool OSystem_MacOSX::hasFeature(Feature f) {
-	if (f == kFeatureDisplayLogFile)
+	if (f == kFeatureDisplayLogFile || f == kFeatureClipboardSupport || f == kFeatureOpenUrl)
 		return true;
 	return OSystem_POSIX::hasFeature(f);
 }
@@ -107,14 +118,25 @@ bool OSystem_MacOSX::displayLogFile() {
 	if (_logFilePath.empty())
 		return false;
 
-	FSRef ref;
-	OSStatus err;
+    CFURLRef url = CFURLCreateFromFileSystemRepresentation(kCFAllocatorDefault, (const UInt8 *)_logFilePath.c_str(), _logFilePath.size(), false);
+    OSStatus err = LSOpenCFURLRef(url, NULL);
+    CFRelease(url);
 
-	err = FSPathMakeRef((const UInt8 *)_logFilePath.c_str(), &ref, NULL);
-	if (err == noErr) {
-		err = LSOpenFSRef(&ref, NULL);
-	}
+	return err != noErr;
+}
 
+bool OSystem_MacOSX::hasTextInClipboard() {
+	return hasTextInClipboardMacOSX();
+}
+
+Common::String OSystem_MacOSX::getTextFromClipboard() {
+	return getTextFromClipboardMacOSX();
+}
+
+bool OSystem_MacOSX::openUrl(const Common::String &url) {
+	CFURLRef urlRef = CFURLCreateWithBytes (NULL, (UInt8*)url.c_str(), url.size(), kCFStringEncodingASCII, NULL);
+	OSStatus err = LSOpenCFURLRef(urlRef, NULL);
+	CFRelease(urlRef);
 	return err != noErr;
 }
 
@@ -139,7 +161,7 @@ Common::String OSystem_MacOSX::getSystemLanguage() const {
 			for (CFIndex i = 0 ; i < localizationsSize ; ++i) {
 				CFStringRef language = (CFStringRef)CFArrayGetValueAtIndex(preferredLocalizations, i);
 				char buffer[10];
-				CFStringGetCString(language, buffer, 50, kCFStringEncodingASCII);
+				CFStringGetCString(language, buffer, sizeof(buffer), kCFStringEncodingASCII);
 				int32 languageId = TransMan.findMatchingLanguage(buffer);
 				if (languageId != -1) {
 					CFRelease(preferredLocalizations);
@@ -150,19 +172,23 @@ Common::String OSystem_MacOSX::getSystemLanguage() const {
 			if (localizationsSize > 0) {
 				CFStringRef language = (CFStringRef)CFArrayGetValueAtIndex(preferredLocalizations, 0);
 				char buffer[10];
-				CFStringGetCString(language, buffer, 50, kCFStringEncodingASCII);
+				CFStringGetCString(language, buffer, sizeof(buffer), kCFStringEncodingASCII);
 				CFRelease(preferredLocalizations);
 				return buffer;
 			}
 			CFRelease(preferredLocalizations);
 		}
-		
+
 	}
 	// Falback to POSIX implementation
 	return OSystem_POSIX::getSystemLanguage();
 #else // USE_DETECTLANG
 	return OSystem_POSIX::getSystemLanguage();
 #endif // USE_DETECTLANG
+}
+
+AudioCDManager *OSystem_MacOSX::createAudioCDManager() {
+	return createMacOSXAudioCDManager();
 }
 
 #endif

@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #ifndef ENGINES_ENGINE_H
@@ -26,6 +27,8 @@
 #include "common/str.h"
 #include "common/language.h"
 #include "common/platform.h"
+#include "common/queue.h"
+#include "common/singleton.h"
 
 class OSystem;
 
@@ -37,6 +40,7 @@ class Error;
 class EventManager;
 class SaveFileManager;
 class TimerManager;
+class FSNode;
 }
 namespace GUI {
 class Debugger;
@@ -140,6 +144,16 @@ public:
 
 	Engine(OSystem *syst);
 	virtual ~Engine();
+
+	/**
+	 * Init SearchMan according to the game path.
+	 *
+	 * By default it adds the directory in non-flat mode with a depth of 4 as
+	 * priority 0 to SearchMan.
+	 *
+	 * @param gamePath The base directory of the game data.
+	 */
+	virtual void initializePath(const Common::FSNode &gamePath);
 
 	/**
 	 * Init the engine and start its main loop.
@@ -321,6 +335,32 @@ protected:
 	bool shouldPerformAutoSave(int lastSaveTime);
 
 };
+
+// Chained games
+
+/**
+ * Singleton class which manages chained games. A chained game is one that
+ * starts automatically, optionally loading a saved game, instead of returning
+ * to the launcher.
+ */
+class ChainedGamesManager : public Common::Singleton<ChainedGamesManager> {
+private:
+	struct Game {
+		Common::String target;
+		int slot;
+	};
+
+	Common::Queue<Game> _chainedGames;
+
+public:
+	ChainedGamesManager();
+	void clear();
+	void push(const Common::String target, const int slot = -1);
+	bool pop(Common::String &target, int &slot);
+};
+
+/** Convenience shortcut for accessing the chained games manager. */
+#define ChainedGamesMan ChainedGamesManager::instance()
 
 // FIXME: HACK for MidiEmu & error()
 extern Engine *g_engine;

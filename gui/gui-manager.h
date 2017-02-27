@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #ifndef GUIMANAGER_H
@@ -33,6 +34,10 @@ class OSystem;
 
 namespace Graphics {
 class Font;
+}
+
+namespace Common {
+	struct Event;
 }
 
 namespace GUI {
@@ -67,6 +72,9 @@ public:
 	// until no dialogs are active anymore.
 	void runLoop();
 
+	void processEvent(const Common::Event &event, Dialog *const activeDialog);
+	void doFullRedraw();
+
 	bool isActive() const	{ return ! _dialogStack.empty(); }
 
 	bool loadNewTheme(Common::String id, ThemeEngine::GraphicsMode gfx = ThemeEngine::kGfxDisabled, bool force = false);
@@ -90,6 +98,8 @@ public:
 	 * @return true if the a screen change indeed occurred, false otherwise
 	 */
 	bool checkScreenChange();
+
+	bool _launched;
 
 protected:
 	enum RedrawStatus {
@@ -115,11 +125,12 @@ protected:
 	bool		_useStdCursor;
 
 	// position and time of last mouse click (used to detect double clicks)
-	struct {
+	struct MousePos {
+		MousePos() : x(-1), y(-1), count(0) { time = 0; }
 		int16 x, y;	// Position of mouse when the click occurred
 		uint32 time;	// Time
 		int count;	// How often was it already pressed?
-	} _lastClick, _lastMousePosition;
+	} _lastClick, _lastMousePosition, _globalMousePosition;
 
 	// mouse cursor state
 	int		_cursorAnimateCounter;
@@ -146,6 +157,9 @@ protected:
 	Dialog *getTopDialog() const;
 
 	void screenChange();
+
+	void giveFocusToDialog(Dialog *dialog);
+	void setLastMousePos(int16 x, int16 y);
 };
 
 } // End of namespace GUI

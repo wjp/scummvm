@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -25,7 +25,7 @@
 #include "mohawk/riven_external.h"
 #include "mohawk/riven_graphics.h"
 #include "mohawk/riven_scripts.h"
-#include "mohawk/sound.h"
+#include "mohawk/riven_sound.h"
 #include "mohawk/video.h"
 
 #include "common/memstream.h"
@@ -309,54 +309,44 @@ void RivenScript::switchCard(uint16 op, uint16 argc, uint16 *argv) {
 
 // Command 3: play an SLST from the script
 void RivenScript::playScriptSLST(uint16 op, uint16 argc, uint16 *argv) {
-	SLSTRecord slstRecord;
 	int offset = 0, j = 0;
+	uint16 soundCount = argv[offset++];
 
+	SLSTRecord slstRecord;
 	slstRecord.index = 0;		// not set by the scripts, so we set it to 0
-	slstRecord.sound_count = argv[0];
-	slstRecord.sound_ids = new uint16[slstRecord.sound_count];
+	slstRecord.soundIds.resize(soundCount);
 
-	offset = slstRecord.sound_count;
-
-	for (j = 0; j < slstRecord.sound_count; j++)
-		slstRecord.sound_ids[j] = argv[offset++];
-	slstRecord.fade_flags = argv[offset++];
+	for (j = 0; j < soundCount; j++)
+		slstRecord.soundIds[j] = argv[offset++];
+	slstRecord.fadeFlags = argv[offset++];
 	slstRecord.loop = argv[offset++];
-	slstRecord.global_volume = argv[offset++];
+	slstRecord.globalVolume = argv[offset++];
 	slstRecord.u0 = argv[offset++];
-	slstRecord.u1 = argv[offset++];
+	slstRecord.suspend = argv[offset++];
 
-	slstRecord.volumes = new uint16[slstRecord.sound_count];
-	slstRecord.balances = new int16[slstRecord.sound_count];
-	slstRecord.u2 = new uint16[slstRecord.sound_count];
+	slstRecord.volumes.resize(soundCount);
+	slstRecord.balances.resize(soundCount);
+	slstRecord.u2.resize(soundCount);
 
-	for (j = 0; j < slstRecord.sound_count; j++)
+	for (j = 0; j < soundCount; j++)
 		slstRecord.volumes[j] = argv[offset++];
 
-	for (j = 0; j < slstRecord.sound_count; j++)
+	for (j = 0; j < soundCount; j++)
 		slstRecord.balances[j] = argv[offset++];	// negative = left, 0 = center, positive = right
 
-	for (j = 0; j < slstRecord.sound_count; j++)
+	for (j = 0; j < soundCount; j++)
 		slstRecord.u2[j] = argv[offset++];			// Unknown
 
 	// Play the requested sound list
 	_vm->_sound->playSLST(slstRecord);
-	_vm->_activatedSLST = true;
-
-	delete[] slstRecord.sound_ids;
-	delete[] slstRecord.volumes;
-	delete[] slstRecord.balances;
-	delete[] slstRecord.u2;
 }
 
 // Command 4: play local tWAV resource (twav_id, volume, block)
 void RivenScript::playSound(uint16 op, uint16 argc, uint16 *argv) {
-	byte volume = Sound::convertRivenVolume(argv[1]);
+	uint16 volume = argv[1];
+	bool playOnDraw = argv[2] == 1;
 
-	if (argv[2] == 1)
-		_vm->_sound->playSoundBlocking(argv[0], volume);
-	else
-		_vm->_sound->playSound(argv[0], volume);
+	_vm->_sound->playSound(argv[0], volume, playOnDraw);
 }
 
 // Command 7: set variable value (variable, value)
@@ -403,7 +393,7 @@ void RivenScript::stopSound(uint16 op, uint16 argc, uint16 *argv) {
 	// would cause all ambient sounds not to play. An alternative
 	// fix would be to stop all scripts on a stack change, but this
 	// does fine for now.
-	if (_vm->getCurStack() == tspit && (_vm->getCurCardRMAP() == 0x6e9a || _vm->getCurCardRMAP() == 0xfeeb))
+	if (_vm->getCurStack() == kStackTspit && (_vm->getCurCardRMAP() == 0x6e9a || _vm->getCurCardRMAP() == 0xfeeb))
 		return;
 
 	// The argument is a bitflag for the setting.
@@ -493,7 +483,9 @@ void RivenScript::changeStack(uint16 op, uint16 argc, uint16 *argv) {
 
 // Command 28: disable a movie
 void RivenScript::disableMovie(uint16 op, uint16 argc, uint16 *argv) {
-	_vm->_video->disableMovieRiven(argv[0]);
+	VideoHandle handle = _vm->_video->findVideoHandleRiven(argv[0]);
+	if (handle)
+		handle->setEnabled(false);
 }
 
 // Command 29: disable all movies
@@ -503,7 +495,9 @@ void RivenScript::disableAllMovies(uint16 op, uint16 argc, uint16 *argv) {
 
 // Command 31: enable a movie
 void RivenScript::enableMovie(uint16 op, uint16 argc, uint16 *argv) {
-	_vm->_video->enableMovieRiven(argv[0]);
+	VideoHandle handle = _vm->_video->findVideoHandleRiven(argv[0]);
+	if (handle)
+		handle->setEnabled(true);
 }
 
 // Command 32: play foreground movie - blocking (movie_id)
@@ -586,7 +580,7 @@ void RivenScript::activatePLST(uint16 op, uint16 argc, uint16 *argv) {
 void RivenScript::activateSLST(uint16 op, uint16 argc, uint16 *argv) {
 	// WORKAROUND: Disable the SLST that is played during Riven's intro.
 	// Riven X does this too (spoke this over with Jeff)
-	if (_vm->getCurStack() == tspit && _vm->getCurCardRMAP() == 0x6e9a && argv[0] == 2)
+	if (_vm->getCurStack() == kStackTspit && _vm->getCurCardRMAP() == 0x6e9a && argv[0] == 2)
 		return;
 
 	_vm->_sound->playSLST(argv[0], _vm->getCurCard());

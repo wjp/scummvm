@@ -8,20 +8,20 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  */
 
-#ifndef SCI_H
-#define SCI_H
+#ifndef SCI_SCI_H
+#define SCI_SCI_H
 
 #include "engines/engine.h"
 #include "common/macresman.h"
@@ -35,7 +35,7 @@ struct ADGameDescription;
 /**
  * This is the namespace of the SCI engine.
  *
- * Status of this engine: ???
+ * Status of this engine: Awesome
  *
  * Games using this engine:
  * - Newer Sierra adventure games (based on FreeSCI)
@@ -44,6 +44,18 @@ struct ADGameDescription;
  * list future games, with status for each.
  */
 namespace Sci {
+
+// GUI-options, primarily used by detection_tables.h
+#define GAMEOPTION_PREFER_DIGITAL_SFX       GUIO_GAMEOPTIONS1
+#define GAMEOPTION_ORIGINAL_SAVELOAD        GUIO_GAMEOPTIONS2
+#define GAMEOPTION_FB01_MIDI                GUIO_GAMEOPTIONS3
+#define GAMEOPTION_JONES_CDAUDIO            GUIO_GAMEOPTIONS4
+#define GAMEOPTION_KQ6_WINDOWS_CURSORS      GUIO_GAMEOPTIONS5
+#define GAMEOPTION_SQ4_SILVER_CURSORS       GUIO_GAMEOPTIONS6
+#define GAMEOPTION_EGA_UNDITHER             GUIO_GAMEOPTIONS7
+// HIGH_RESOLUTION_GRAPHICS availability is checked for in SciEngine::run()
+#define GAMEOPTION_HIGH_RESOLUTION_GRAPHICS GUIO_GAMEOPTIONS8
+#define GAMEOPTION_ENABLE_BLACK_LINED_VIDEO GUIO_GAMEOPTIONS9
 
 struct EngineState;
 class Vocabulary;
@@ -55,20 +67,24 @@ class AudioPlayer;
 class SoundCommandParser;
 class EventManager;
 class SegManager;
+class ScriptPatcher;
+class Sync;
 
 class GfxAnimate;
 class GfxCache;
 class GfxCompare;
 class GfxControls16;
 class GfxControls32;
-class GfxCoordAdjuster;
+class GfxCoordAdjuster16;
 class GfxCursor;
 class GfxMacIconBar;
 class GfxMenu;
-class GfxPaint;
 class GfxPaint16;
 class GfxPaint32;
 class GfxPalette;
+class GfxPalette32;
+class GfxRemap;
+class GfxRemap32;
 class GfxPorts;
 class GfxScreen;
 class GfxText16;
@@ -76,40 +92,48 @@ class GfxText32;
 class GfxTransitions;
 
 #ifdef ENABLE_SCI32
-class RobotDecoder;
 class GfxFrameout;
+class Audio32;
+class Video32;
+class GfxTransitions32;
+class GfxCursor32;
 #endif
 
 // our engine debug levels
 enum kDebugLevels {
-	kDebugLevelError      = 1 << 0,
-	kDebugLevelNodes      = 1 << 1,
-	kDebugLevelGraphics   = 1 << 2,
-	kDebugLevelStrings    = 1 << 3,
-	kDebugLevelMemory     = 1 << 4,
-	kDebugLevelFuncCheck  = 1 << 5,
-	kDebugLevelBresen     = 1 << 6,
-	kDebugLevelSound      = 1 << 7,
-	kDebugLevelBaseSetter = 1 << 8,
-	kDebugLevelParser     = 1 << 9,
-	kDebugLevelSaid       = 1 << 10,
-	kDebugLevelFile       = 1 << 11,
-	kDebugLevelTime       = 1 << 12,
-	kDebugLevelRoom       = 1 << 13,
-	kDebugLevelAvoidPath  = 1 << 14,
-	kDebugLevelDclInflate = 1 << 15,
-	kDebugLevelVM         = 1 << 16,
-	kDebugLevelScripts    = 1 << 17,
-	kDebugLevelGC         = 1 << 18,
-	kDebugLevelResMan     = 1 << 19,
-	kDebugLevelOnStartup  = 1 << 20,
-	kDebugLevelDebugMode  = 1 << 21
+	kDebugLevelError         = 1 << 0,
+	kDebugLevelNodes         = 1 << 1,
+	kDebugLevelGraphics      = 1 << 2,
+	kDebugLevelStrings       = 1 << 3,
+	kDebugLevelMemory        = 1 << 4,
+	kDebugLevelFuncCheck     = 1 << 5,
+	kDebugLevelBresen        = 1 << 6,
+	kDebugLevelSound         = 1 << 7,
+	kDebugLevelBaseSetter    = 1 << 8,
+	kDebugLevelParser        = 1 << 9,
+	kDebugLevelSaid          = 1 << 10,
+	kDebugLevelFile          = 1 << 11,
+	kDebugLevelTime          = 1 << 12,
+	kDebugLevelRoom          = 1 << 13,
+	kDebugLevelAvoidPath     = 1 << 14,
+	kDebugLevelDclInflate    = 1 << 15,
+	kDebugLevelVM            = 1 << 16,
+	kDebugLevelScripts       = 1 << 17,
+	kDebugLevelGC            = 1 << 18,
+	kDebugLevelResMan        = 1 << 19,
+	kDebugLevelOnStartup     = 1 << 20,
+	kDebugLevelDebugMode     = 1 << 21,
+	kDebugLevelScriptPatcher = 1 << 22,
+	kDebugLevelWorkarounds   = 1 << 23,
+	kDebugLevelVideo         = 1 << 24,
+	kDebugLevelGame          = 1 << 25
 };
 
 enum SciGameId {
 	GID_ASTROCHICKEN,
 	GID_CAMELOT,
 	GID_CASTLEBRAIN,
+	GID_CHEST,
 	GID_CHRISTMAS1988,
 	GID_CHRISTMAS1990,
 	GID_CHRISTMAS1992,
@@ -123,13 +147,16 @@ enum SciGameId {
 	GID_FAIRYTALES,
 	GID_FREDDYPHARKAS,
 	GID_FUNSEEKER,
+	GID_GK1DEMO,	// We have a separate ID for GK1 demo, because it's actually a completely different game (SCI1.1 vs SCI2/SCI2.1)
 	GID_GK1,
 	GID_GK2,
 	GID_HOYLE1,
 	GID_HOYLE2,
 	GID_HOYLE3,
 	GID_HOYLE4,
+	GID_HOYLE5,
 	GID_ICEMAN,
+	GID_INNDEMO,
 	GID_ISLANDBRAIN,
 	GID_JONES,
 	GID_KQ1,
@@ -137,6 +164,7 @@ enum SciGameId {
 	GID_KQ5,
 	GID_KQ6,
 	GID_KQ7,
+	GID_KQUESTIONS,
 	GID_LAURABOW,
 	GID_LAURABOW2,
 	GID_LIGHTHOUSE,
@@ -159,12 +187,14 @@ enum SciGameId {
 	GID_PQ2,
 	GID_PQ3,
 	GID_PQ4,
+	GID_PQ4DEMO,	// We have a separate ID for PQ4 demo, because it's actually a completely different game (SCI1.1 vs SCI2/SCI2.1)
 	GID_PQSWAT,
 	GID_QFG1,
 	GID_QFG1VGA,
 	GID_QFG2,
 	GID_QFG3,
 	GID_QFG4,
+	GID_QFG4DEMO,	// We have a separate ID for QFG4 demo, because it's actually a completely different game (SCI1.1 vs SCI2/SCI2.1)
 	GID_RAMA,
 	GID_SHIVERS,
 	//GID_SHIVERS2,	// Not SCI
@@ -195,7 +225,9 @@ enum SciVersion {
 	SCI_VERSION_1_LATE, // Dr. Brain 1, EcoQuest 1, Longbow, PQ3, SQ1, LSL5, KQ5 CD
 	SCI_VERSION_1_1, // Dr. Brain 2, EcoQuest 1 CD, EcoQuest 2, KQ6, QFG3, SQ4CD, XMAS 1992 and many more
 	SCI_VERSION_2, // GK1, PQ4 floppy, QFG4 floppy
-	SCI_VERSION_2_1, // GK2, KQ7, LSL6 hires, MUMG Deluxe, Phantasmagoria 1, PQ4CD, PQ:SWAT, QFG4CD, Shivers 1, SQ6, Torin
+	SCI_VERSION_2_1_EARLY, // GK2 demo, KQ7 1.4/1.51, LSL6 hires, PQ4CD, QFG4CD
+	SCI_VERSION_2_1_MIDDLE, // GK2, Hoyle 5, KQ7 2.00b, MUMG Deluxe, Phantasmagoria 1, PQ:SWAT, Shivers 1, SQ6, Torin
+	SCI_VERSION_2_1_LATE, // demos of LSL7, Lighthouse, RAMA
 	SCI_VERSION_3 // LSL7, Lighthouse, RAMA, Phantasmagoria 2
 };
 
@@ -228,7 +260,30 @@ public:
 	bool canLoadGameStateCurrently();
 	bool canSaveGameStateCurrently();
 	void syncSoundSettings();
+	uint32 getTickCount();
+	void setTickCount(const uint32 ticks);
+
+	/**
+	 * Syncs the audio options of the ScummVM launcher (speech, subtitles or
+	 * both) with the in-game audio options of certain CD game versions. For
+	 * some games, this allows simultaneous playing of speech and subtitles,
+	 * even if the original games didn't support this feature.
+	 *
+	 * SCI1.1 games which support simultaneous speech and subtitles:
+	 * - EcoQuest 1 CD
+	 * - Leisure Suit Larry 6 CD
+	 * SCI1.1 games which don't support simultaneous speech and subtitles,
+	 * and we add this functionality in ScummVM:
+	 * - Space Quest 4 CD
+	 * - Freddy Pharkas CD
+	 * - Laura Bow 2 CD
+	 * SCI1.1 games which don't support simultaneous speech and subtitles,
+	 * and we haven't added any extra functionality in ScummVM because extra
+	 * script patches are needed:
+	 * - King's Quest 6 CD
+	 */
 	void syncIngameAudioOptions();
+	void updateScummVMAudioOptions();
 
 	const SciGameId &getGameId() const { return _gameId; }
 	const char *getGameIdStr() const;
@@ -237,6 +292,7 @@ public:
 	Common::Platform getPlatform() const;
 	bool isDemo() const;
 	bool isCD() const;
+	bool forceHiresGraphics() const;
 
 	/** Returns true if the game's original platform is big-endian. */
 	bool isBE() const;
@@ -244,11 +300,12 @@ public:
 	bool hasMacIconBar() const;
 
 	inline ResourceManager *getResMan() const { return _resMan; }
+	inline ScriptPatcher *getScriptPatcher() const { return _scriptPatcher; }
 	inline Kernel *getKernel() const { return _kernel; }
 	inline EngineState *getEngineState() const { return _gamestate; }
 	inline Vocabulary *getVocabulary() const { return _vocabulary; }
 	inline EventManager *getEventManager() const { return _eventMan; }
-	inline reg_t getGameObject() const { return _gameObjectAddress; }
+	inline reg_t getGameObject() const { return _gameObjectAddress; } // Gets the game object VM address
 
 	Common::RandomSource &getRNG() { return _rng; }
 
@@ -263,6 +320,8 @@ public:
 	/** Remove the 'TARGET-' prefix of the given filename, if present. */
 	Common::String unwrapFilename(const Common::String &name) const;
 
+	const char *getGameObjectName(); // Gets the name of the game object (should only be used for identifying fanmade games)
+
 	/**
 	 * Checks if we are in a QfG import screen, where special handling
 	 * of file-listings is performed.
@@ -274,6 +333,7 @@ public:
 	void scriptDebug();
 	bool checkExportBreakpoint(uint16 script, uint16 pubfunct);
 	bool checkSelectorBreakpoint(BreakpointType breakpointType, reg_t send_obj, int selector);
+	bool checkAddressBreakpoint(const reg32_t &address);
 
 	void patchGameSaveRestore();
 
@@ -287,13 +347,16 @@ public:
 	 *					if NULL is passed no subtitle will be added to the returned string
 	 * @return processed string
 	 */
-	Common::String strSplit(const char *str, const char *sep = "\r----------\r");
+	Common::String strSplitLanguage(const char *str, uint16 *splitLanguage, const char *sep = "\r----------\r");
+	Common::String strSplit(const char *str, const char *sep = "\r----------\r") {
+		return strSplitLanguage(str, NULL, sep);
+	}
 
 	kLanguage getSciLanguage();
 	void setSciLanguage(kLanguage lang);
 	void setSciLanguage();
 
-	Common::String getSciLanguageString(const Common::String &str, kLanguage lang, kLanguage *lang2 = NULL) const;
+	Common::String getSciLanguageString(const Common::String &str, kLanguage lang, kLanguage *lang2 = NULL, uint16 *languageSplitter = NULL) const;
 
 	// Check if vocabulary needs to get switched (in multilingual parser games)
 	void checkVocabularySwitch();
@@ -307,11 +370,13 @@ public:
 	GfxCompare *_gfxCompare;
 	GfxControls16 *_gfxControls16; // Controls for 16-bit gfx
 	GfxControls32 *_gfxControls32; // Controls for 32-bit gfx
-	GfxCoordAdjuster *_gfxCoordAdjuster;
+	GfxCoordAdjuster16 *_gfxCoordAdjuster;
 	GfxCursor *_gfxCursor;
 	GfxMenu *_gfxMenu; // Menu for 16-bit gfx
-	GfxPalette *_gfxPalette;
-	GfxPaint *_gfxPaint;
+	GfxPalette *_gfxPalette16;
+	GfxPalette32 *_gfxPalette32; // Palette for 32-bit gfx
+	GfxRemap *_gfxRemap16;	// Remapping for the QFG4 demo
+	GfxRemap32 *_gfxRemap32; // Remapping for 32-bit gfx
 	GfxPaint16 *_gfxPaint16; // Painting in 16-bit gfx
 	GfxPaint32 *_gfxPaint32; // Painting in 32-bit gfx
 	GfxPorts *_gfxPorts; // Port managment for 16-bit gfx
@@ -322,11 +387,15 @@ public:
 	GfxMacIconBar *_gfxMacIconBar; // Mac Icon Bar manager
 
 #ifdef ENABLE_SCI32
-	RobotDecoder *_robotDecoder;
+	Audio32 *_audio32;
+	Video32 *_video32;
 	GfxFrameout *_gfxFrameout; // kFrameout and the like for 32-bit gfx
+	GfxTransitions32 *_gfxTransitions32;
+	GfxCursor32 *_gfxCursor32;
 #endif
 
 	AudioPlayer *_audio;
+	Sync *_sync;
 	SoundCommandParser *_soundCmd;
 	GameFeatures *_features;
 
@@ -375,6 +444,7 @@ private:
 	const ADGameDescription *_gameDescription;
 	const SciGameId _gameId;
 	ResourceManager *_resMan; /**< The resource manager */
+	ScriptPatcher *_scriptPatcher; /**< The script patcher */
 	EngineState *_gamestate;
 	Kernel *_kernel;
 	Vocabulary *_vocabulary;
@@ -384,6 +454,7 @@ private:
 	Console *_console;
 	Common::RandomSource _rng;
 	Common::MacResManager _macExecutable;
+	bool _forceHiresGraphics; // user-option for GK1, KQ6, PQ4
 };
 
 
@@ -401,10 +472,16 @@ extern SciEngine *g_sci;
 SciVersion getSciVersion();
 
 /**
+ * Same as above, but this version doesn't assert on unknown SCI versions.
+ * Only used by the fallback detector
+ */
+SciVersion getSciVersionForDetection();
+
+/**
  * Convenience function converting an SCI version into a human-readable string.
  */
 const char *getSciVersionDesc(SciVersion version);
 
 } // End of namespace Sci
 
-#endif // SCI_H
+#endif // SCI_SCI_H

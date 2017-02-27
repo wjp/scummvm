@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -23,6 +23,7 @@
 #include "common/config-manager.h"
 #include "common/translation.h"
 #include "gui/saveload.h"
+#include "tsage/dialogs.h"
 #include "tsage/scenes.h"
 #include "tsage/globals.h"
 #include "tsage/ringworld/ringworld_logic.h"
@@ -43,6 +44,7 @@ SceneManager::SceneManager() {
 	g_saver->addListener(this);
 	_objectCount = 0;
 	_loadMode = 0;
+	_sceneLoadCount = 0;
 }
 
 SceneManager::~SceneManager() {
@@ -56,8 +58,13 @@ void SceneManager::setNewScene(int sceneNumber) {
 
 void SceneManager::checkScene() {
 	if (_nextSceneNumber != -1) {
+		int nextSceneNumber = _nextSceneNumber;
+
 		sceneChange();
-		_nextSceneNumber = -1;
+
+		// Unless we've already switched to yet another scene, reset
+		if (_nextSceneNumber == nextSceneNumber)
+			_nextSceneNumber = -1;
 	}
 
 	g_globals->dispatchSounds();
@@ -133,7 +140,7 @@ void SceneManager::fadeInIfNecessary() {
 				percent = 100;
 
 			g_globals->_scenePalette.fade((const byte *)&adjustData, false, percent);
-			GLOBALS._screenSurface.updateScreen();
+			GLOBALS._screen.update();
 			g_system->delayMillis(10);
 		}
 
@@ -144,6 +151,7 @@ void SceneManager::fadeInIfNecessary() {
 
 void SceneManager::changeScene(int newSceneNumber) {
 	debug(1, "changeScene(%d)", newSceneNumber);
+
 	// Fade out the scene
 	ScenePalette scenePalette;
 	uint32 adjustData = 0;
@@ -168,7 +176,7 @@ void SceneManager::changeScene(int newSceneNumber) {
 	}
 
 	// Blank out the screen
-	g_globals->_screenSurface.fillRect(g_globals->_screenSurface.getBounds(), 0);
+	g_globals->_screen.fillRect(g_globals->_screen.getBounds(), 0);
 
 	// If there are any fading sounds, wait until fading is complete
 	while (g_globals->_soundManager.isFading()) {
@@ -247,6 +255,14 @@ void SceneManager::listenerSynchronize(Serializer &s) {
 		}
 	}
 
+	// Walk regions loading
+	if (g_vm->getGameID() == GType_Ringworld2) {
+		int walkRegionsId = GLOBALS._walkRegions._resNum;
+		s.syncAsSint16LE(walkRegionsId);
+		if (s.isLoading())
+			GLOBALS._walkRegions.load(walkRegionsId);
+	}
+
 	g_globals->_sceneManager._scrollerRect.synchronize(s);
 	SYNC_POINTER(g_globals->_scrollFollower);
 	s.syncAsSint16LE(_loadMode);
@@ -260,6 +276,8 @@ Scene::Scene() : _sceneBounds(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT),
 	_activeScreenNumber = 0;
 	_oldSceneBounds = Rect(4000, 4000, 4100, 4100);
 	Common::fill(&_zoomPercents[0], &_zoomPercents[256], 0);
+
+	_screenNumber = 0;
 }
 
 Scene::~Scene() {
@@ -269,15 +287,23 @@ void Scene::synchronize(Serializer &s) {
 	if (s.getVersion() >= 2)
 		StripCallback::synchronize(s);
 
-	s.syncAsSint32LE(_field12);
+	if (s.getVersion() < 14) {
+		int useless = 0;
+		s.syncAsSint32LE(useless);
+	}
+
 	s.syncAsSint32LE(_screenNumber);
 	s.syncAsSint32LE(_activeScreenNumber);
 	s.syncAsSint32LE(_sceneMode);
 	_backgroundBounds.synchronize(s);
 	_sceneBounds.synchronize(s);
 	_oldSceneBounds.synchronize(s);
-	s.syncAsSint16LE(_fieldA);
-	s.syncAsSint16LE(_fieldE);
+
+	if (s.getVersion() < 14) {
+		int useless = 0;
+		s.syncAsSint16LE(useless);
+		s.syncAsSint16LE(useless);
+	}
 
 	for (int i = 0; i < 256; ++i)
 		s.syncAsUint16LE(_enabledSections[i]);
@@ -290,7 +316,6 @@ void Scene::synchronize(Serializer &s) {
 
 void Scene::postInit(SceneObjectList *OwnerList) {
 	_action = NULL;
-	_field12 = 0;
 	_sceneMode = 0;
 }
 
@@ -439,7 +464,7 @@ void Scene::refreshBackground(int xAmount, int yAmount) {
 				// Check if the section is already loaded
 				if ((_enabledSections[xp * 16 + yp] == 0xffff) || ((xAmount == 0) && (yAmount == 0))) {
 					// Chunk isn't loaded, so load it in
-					Graphics::Surface s = _backSurface.lockSurface();
+					Graphics::ManagedSurface s = _backSurface.lockSurface();
 					GfxSurface::loadScreenSection(s, xp - xHalfOffset, yp - yHalfOffset, xp, yp);
 					_backSurface.unlockSurface();
 					changedFlag = true;

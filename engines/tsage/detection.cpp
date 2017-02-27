@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -40,7 +40,7 @@ struct tSageGameDescription {
 };
 
 const char *TSageEngine::getGameId() const {
-	return _gameDescription->desc.gameid;
+	return _gameDescription->desc.gameId;
 }
 
 uint32 TSageEngine::getGameID() const {
@@ -62,6 +62,7 @@ static const PlainGameDescriptor tSageGameTitles[] = {
 	{ "ringworld", "Ringworld: Revenge of the Patriarch" },
 	{ "blueforce", "Blue Force" },
 	{ "ringworld2", "Return to Ringworld" },
+	{ "sherlock-logo", "The Lost Files of Sherlock Holmes (Logo)" },
 	{ 0, 0 }
 };
 
@@ -74,8 +75,7 @@ enum {
 class TSageMetaEngine : public AdvancedMetaEngine {
 public:
 	TSageMetaEngine() : AdvancedMetaEngine(TsAGE::gameDescriptions, sizeof(TsAGE::tSageGameDescription), tSageGameTitles) {
-		_singleid = "tsage";
-		_guioptions = GUIO1(GUIO_NOSPEECH);
+		_singleId = "tsage";
 	}
 
 	virtual const char *getName() const {
@@ -83,7 +83,7 @@ public:
 	}
 
 	virtual const char *getOriginalCopyright() const {
-		return "(c) Tsunami Media";
+		return "(C) Tsunami Media";
 	}
 
 	virtual bool hasFeature(MetaEngineFeature f) const {
@@ -95,6 +95,7 @@ public:
 		case kSavesSupportThumbnail:
 		case kSavesSupportCreationDate:
 		case kSavesSupportPlayTime:
+		case kSimpleSavesNames:
 			return true;
 		default:
 			return false;
@@ -114,10 +115,9 @@ public:
 
 	virtual SaveStateList listSaves(const char *target) const {
 		Common::String pattern = target;
-		pattern += ".???";
+		pattern += ".###";
 
 		Common::StringArray filenames = g_system->getSavefileManager()->listSavefiles(pattern);
-		sort(filenames.begin(), filenames.end());
 		TsAGE::tSageSavegameHeader header;
 
 		SaveStateList saveList;
@@ -130,10 +130,10 @@ public:
 
 				if (in) {
 					if (TsAGE::Saver::readSavegameHeader(in, header)) {
-						saveList.push_back(SaveStateDescriptor(slot, header.saveName));
+						saveList.push_back(SaveStateDescriptor(slot, header._saveName));
 
-						header.thumbnail->free();
-						delete header.thumbnail;
+						header._thumbnail->free();
+						delete header._thumbnail;
 					}
 
 					delete in;
@@ -141,6 +141,8 @@ public:
 			}
 		}
 
+		// Sort saves based on slot number.
+		Common::sort(saveList.begin(), saveList.end(), SaveStateDescriptorSlotComparator());
 		return saveList;
 	}
 
@@ -156,18 +158,18 @@ public:
 	SaveStateDescriptor querySaveMetaInfos(const char *target, int slot) const {
 		Common::InSaveFile *f = g_system->getSavefileManager()->openForLoading(
 			generateGameStateFileName(target, slot));
-		
+
 		if (f) {
 			TsAGE::tSageSavegameHeader header;
 			TsAGE::Saver::readSavegameHeader(f, header);
 			delete f;
 
 			// Create the return descriptor
-			SaveStateDescriptor desc(slot, header.saveName);
-			desc.setThumbnail(header.thumbnail);
-			desc.setSaveDate(header.saveYear, header.saveMonth, header.saveDay);
-			desc.setSaveTime(header.saveHour, header.saveMinutes);
-			desc.setPlayTime(header.totalFrames * GAME_FRAME_TIME);
+			SaveStateDescriptor desc(slot, header._saveName);
+			desc.setThumbnail(header._thumbnail);
+			desc.setSaveDate(header._saveYear, header._saveMonth, header._saveDay);
+			desc.setSaveTime(header._saveHour, header._saveMinutes);
+			desc.setPlayTime(header._totalFrames * GAME_FRAME_TIME);
 
 			return desc;
 		}
@@ -177,7 +179,7 @@ public:
 };
 
 #if PLUGIN_ENABLED_DYNAMIC(TSAGE)
-REGISTER_PLUGIN_DYNAMIC(TSAGE, PLUGIN_TYPE_ENGINE, TSageMetaEngine);
+	REGISTER_PLUGIN_DYNAMIC(TSAGE, PLUGIN_TYPE_ENGINE, TSageMetaEngine);
 #else
-REGISTER_PLUGIN_STATIC(TSAGE, PLUGIN_TYPE_ENGINE, TSageMetaEngine);
+	REGISTER_PLUGIN_STATIC(TSAGE, PLUGIN_TYPE_ENGINE, TSageMetaEngine);
 #endif

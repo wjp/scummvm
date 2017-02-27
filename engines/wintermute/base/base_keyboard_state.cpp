@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -103,13 +103,13 @@ bool BaseKeyboardState::scCallMethod(ScScript *script, ScStack *stack, ScStack *
 
 
 //////////////////////////////////////////////////////////////////////////
-ScValue *BaseKeyboardState::scGetProperty(const char *name) {
+ScValue *BaseKeyboardState::scGetProperty(const Common::String &name) {
 	_scValue->setNULL();
 
 	//////////////////////////////////////////////////////////////////////////
 	// Type
 	//////////////////////////////////////////////////////////////////////////
-	if (strcmp(name, "Type") == 0) {
+	if (name == "Type") {
 		_scValue->setString("keyboard");
 		return _scValue;
 	}
@@ -117,7 +117,7 @@ ScValue *BaseKeyboardState::scGetProperty(const char *name) {
 	//////////////////////////////////////////////////////////////////////////
 	// Key
 	//////////////////////////////////////////////////////////////////////////
-	else if (strcmp(name, "Key") == 0) {
+	else if (name == "Key") {
 		if (_currentPrintable) {
 			char key[2];
 			key[0] = (char)_currentCharCode;
@@ -133,7 +133,7 @@ ScValue *BaseKeyboardState::scGetProperty(const char *name) {
 	//////////////////////////////////////////////////////////////////////////
 	// Printable
 	//////////////////////////////////////////////////////////////////////////
-	else if (strcmp(name, "Printable") == 0) {
+	else if (name == "Printable") {
 		_scValue->setBool(_currentPrintable);
 		return _scValue;
 	}
@@ -141,7 +141,7 @@ ScValue *BaseKeyboardState::scGetProperty(const char *name) {
 	//////////////////////////////////////////////////////////////////////////
 	// KeyCode
 	//////////////////////////////////////////////////////////////////////////
-	else if (strcmp(name, "KeyCode") == 0) {
+	else if (name == "KeyCode") {
 		_scValue->setInt(_currentCharCode);
 		return _scValue;
 	}
@@ -149,7 +149,7 @@ ScValue *BaseKeyboardState::scGetProperty(const char *name) {
 	//////////////////////////////////////////////////////////////////////////
 	// IsShift
 	//////////////////////////////////////////////////////////////////////////
-	else if (strcmp(name, "IsShift") == 0) {
+	else if (name == "IsShift") {
 		_scValue->setBool(_currentShift);
 		return _scValue;
 	}
@@ -157,7 +157,7 @@ ScValue *BaseKeyboardState::scGetProperty(const char *name) {
 	//////////////////////////////////////////////////////////////////////////
 	// IsAlt
 	//////////////////////////////////////////////////////////////////////////
-	else if (strcmp(name, "IsAlt") == 0) {
+	else if (name == "IsAlt") {
 		_scValue->setBool(_currentAlt);
 		return _scValue;
 	}
@@ -165,7 +165,7 @@ ScValue *BaseKeyboardState::scGetProperty(const char *name) {
 	//////////////////////////////////////////////////////////////////////////
 	// IsControl
 	//////////////////////////////////////////////////////////////////////////
-	else if (strcmp(name, "IsControl") == 0) {
+	else if (name == "IsControl") {
 		_scValue->setBool(_currentControl);
 		return _scValue;
 	} else {
@@ -200,9 +200,14 @@ const char *BaseKeyboardState::scToString() {
 bool BaseKeyboardState::readKey(Common::Event *event) {
 	//_currentPrintable = (event->type == SDL_TEXTINPUT); // TODO
 	_currentCharCode = keyCodeToVKey(event);
-	if ((_currentCharCode <= Common::KEYCODE_z && _currentCharCode >= Common::KEYCODE_a) ||
-	        (_currentCharCode <= Common::KEYCODE_9 && _currentCharCode >= Common::KEYCODE_0) ||
-			(_currentCharCode == Common::KEYCODE_SPACE)) {
+	// convert all lowercase keys to uppercase to make it easier for handling later on for consistency
+	if (Common::isLower(_currentCharCode) && (event->kbd.hasFlags(Common::KBD_SHIFT) || event->kbd.flags & Common::KBD_CAPS)) {
+		if (!(event->kbd.keycode >= Common::KEYCODE_F1 && event->kbd.keycode <= Common::KEYCODE_F12)) {
+			_currentCharCode = toupper(_currentCharCode);
+		}
+	}
+	// Verify that this is a printable ISO-8859-character (including the upper charset)
+	if ((_currentCharCode <= 0x7E && _currentCharCode >= 0x20) || (_currentCharCode <= 0xFF && _currentCharCode >= 0xA0)) {
 		_currentPrintable = true;
 	} else {
 		_currentPrintable = false;
@@ -222,12 +227,12 @@ bool BaseKeyboardState::persist(BasePersistenceManager *persistMgr) {
 	//if (!persistMgr->getIsSaving()) cleanup();
 	BaseScriptable::persist(persistMgr);
 
-	persistMgr->transfer(TMEMBER(_currentAlt));
-	persistMgr->transfer(TMEMBER(_currentCharCode));
-	persistMgr->transfer(TMEMBER(_currentControl));
-	persistMgr->transfer(TMEMBER(_currentKeyData));
-	persistMgr->transfer(TMEMBER(_currentPrintable));
-	persistMgr->transfer(TMEMBER(_currentShift));
+	persistMgr->transferBool(TMEMBER(_currentAlt));
+	persistMgr->transferUint32(TMEMBER(_currentCharCode));
+	persistMgr->transferBool(TMEMBER(_currentControl));
+	persistMgr->transferUint32(TMEMBER(_currentKeyData));
+	persistMgr->transferBool(TMEMBER(_currentPrintable));
+	persistMgr->transferBool(TMEMBER(_currentShift));
 
 	if (!persistMgr->getIsSaving()) {
 		_keyStates = new uint8[323]; // Hardcoded size for the common/keyboard.h enum
@@ -258,46 +263,176 @@ bool BaseKeyboardState::isAltDown() {
 }
 
 //////////////////////////////////////////////////////////////////////////
+bool BaseKeyboardState::isCurrentPrintable() const {
+	return _currentPrintable;
+}
+
+//////////////////////////////////////////////////////////////////////////
+enum VKeyCodes {
+	kVkBack       = 8,
+	kVkTab        = 9,
+
+	kVkReturn     = 13,
+	kVkPause      = 19,
+
+	kVkEscape     = 27,
+
+	kVkSpace      = 32,
+	kVkEnd        = 35,
+	kVkHome       = 36,
+	kVkLeft       = 37,
+	kVkUp         = 38,
+	kVkRight      = 39,
+	kVkDown       = 40,
+	kVkInsert     = 45,
+
+	kVkF1         = 112,
+	kVkF2         = 113,
+	kVkF3         = 114,
+	kVkF4         = 115,
+	kVkF5         = 116,
+	kVkF6         = 117,
+	kVkF7         = 118,
+	kVkF8         = 119,
+	kVkF9         = 120,
+	kVkF10        = 121,
+	kVkF11        = 122,
+	kVkF12        = 123
+
+};
+
+//////////////////////////////////////////////////////////////////////////
 uint32 BaseKeyboardState::keyCodeToVKey(Common::Event *event) {
+	// todo
 	if (event->type != Common::EVENT_KEYDOWN) {
 		return 0;
 	}
 
-	switch (event->kbd.keycode) {
-	case Common::KEYCODE_KP_ENTER:
-		return Common::KEYCODE_RETURN;
-	default:
-		return (uint32)event->kbd.keycode;
+	// return ASCII value if key pressed is an alphanumeric key
+	// number keys pressed on numpad are handled in next block
+	if (Common::isAlnum(event->kbd.keycode)) {
+		return event->kbd.ascii;
 	}
-}
 
-enum VKeyCodes {
-	kVkSpace = 32,
-	kVkLeft  = 37,
-	kVkUp    = 38,
-	kVkRight = 39,
-	kVkDown  = 40
-};
+	// if NumLock is active, return ASCII for numpad keys
+	// keys pressed on numpad without NumLock are considered as normal keycodes, handled in the next block
+	if (Common::isDigit(event->kbd.ascii) && ((event->kbd.flags & Common::KBD_NUM) != 0)) {
+		return event->kbd.ascii;
+	}
+
+	switch (event->kbd.keycode) {
+	case Common::KEYCODE_BACKSPACE:
+		return kVkBack;
+	case Common::KEYCODE_TAB:
+		return kVkTab;
+	case Common::KEYCODE_RETURN:
+	case Common::KEYCODE_KP_ENTER:
+		return kVkReturn;
+	case Common::KEYCODE_PAUSE:
+		return kVkPause;
+	case Common::KEYCODE_ESCAPE:
+		return kVkEscape;
+	case Common::KEYCODE_SPACE:
+		return kVkSpace;
+	case Common::KEYCODE_END:
+	case Common::KEYCODE_KP1:
+		return kVkEnd;
+	case Common::KEYCODE_HOME:
+	case Common::KEYCODE_KP7:
+		return kVkHome;
+	case Common::KEYCODE_LEFT:
+	case Common::KEYCODE_KP4:
+		return kVkLeft;
+	case Common::KEYCODE_RIGHT:
+	case Common::KEYCODE_KP6:
+		return kVkRight;
+	case Common::KEYCODE_UP:
+	case Common::KEYCODE_KP8:
+		return kVkUp;
+	case Common::KEYCODE_DOWN:
+	case Common::KEYCODE_KP2:
+		return kVkDown;
+	case Common::KEYCODE_INSERT:
+	case Common::KEYCODE_KP0:
+		return kVkInsert;
+	case Common::KEYCODE_F1:
+		return kVkF1;
+	case Common::KEYCODE_F2:
+		return kVkF2;
+	case Common::KEYCODE_F3:
+		return kVkF3;
+	case Common::KEYCODE_F4:
+		return kVkF4;
+	case Common::KEYCODE_F5:
+		return kVkF5;
+	case Common::KEYCODE_F6:
+		return kVkF6;
+	case Common::KEYCODE_F7:
+		return kVkF7;
+	case Common::KEYCODE_F8:
+		return kVkF8;
+	case Common::KEYCODE_F9:
+		return kVkF9;
+	case Common::KEYCODE_F10:
+		return kVkF10;
+	case Common::KEYCODE_F11:
+		return kVkF11;
+	case Common::KEYCODE_F12:
+		return kVkF12;
+	default:
+		// check if any non-sticky keys were used, otherwise key is unknown to us
+		if ((event->kbd.flags & Common::KBD_NON_STICKY) == 0) {
+			warning("Key pressed is not recognized, ASCII returned (%d '%c').", event->kbd.keycode, event->kbd.keycode);
+		}
+		// return ASCII if no match, since it could be used for typing
+		return event->kbd.ascii;
+		break;
+	}
+
+}
 
 //////////////////////////////////////////////////////////////////////////
 Common::KeyCode BaseKeyboardState::vKeyToKeyCode(uint32 vkey) {
 	// todo
 	switch (vkey) {
+	case kVkEscape:
+		return Common::KEYCODE_ESCAPE;
 	case kVkSpace:
 		return Common::KEYCODE_SPACE;
-		break;
+	case kVkHome:
+		return Common::KEYCODE_HOME;
 	case kVkLeft:
 		return Common::KEYCODE_LEFT;
-		break;
 	case kVkRight:
 		return Common::KEYCODE_RIGHT;
-		break;
 	case kVkUp:
 		return Common::KEYCODE_UP;
-		break;
 	case kVkDown:
 		return Common::KEYCODE_DOWN;
-		break;
+	case kVkF1:
+		return Common::KEYCODE_F1;
+	case kVkF2:
+		return Common::KEYCODE_F2;
+	case kVkF3:
+		return Common::KEYCODE_F3;
+	case kVkF4:
+		return Common::KEYCODE_F4;
+	case kVkF5:
+		return Common::KEYCODE_F5;
+	case kVkF6:
+		return Common::KEYCODE_F6;
+	case kVkF7:
+		return Common::KEYCODE_F7;
+	case kVkF8:
+		return Common::KEYCODE_F8;
+	case kVkF9:
+		return Common::KEYCODE_F9;
+	case kVkF10:
+		return Common::KEYCODE_F10;
+	case kVkF11:
+		return Common::KEYCODE_F11;
+	case kVkF12:
+		return Common::KEYCODE_F12;
 	default:
 		warning("Unknown VKEY: %d", vkey);
 		return (Common::KeyCode)vkey;
@@ -306,4 +441,4 @@ Common::KeyCode BaseKeyboardState::vKeyToKeyCode(uint32 vkey) {
 
 }
 
-} // end of namespace Wintermute
+} // End of namespace Wintermute

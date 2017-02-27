@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -91,6 +91,8 @@ Screen::Screen(MadeEngine *vm) : _vm(vm) {
 	_currentFontNum = 0;
 	_fontDrawCtx.clipRect = Common::Rect(320, 200);
 	_fontDrawCtx.destSurface = _backgroundScreen;
+	_outlineColor = 0;
+	_dropShadowColor = 0;
 
 	clearChannels();
 }
@@ -344,12 +346,12 @@ void Screen::drawSpriteChannels(const ClipInfo &clipInfo, int16 includeStateMask
 void Screen::updateSprites() {
 	// TODO: This needs some more work, dirty rectangles are currently not used
 
-	memcpy(_workScreen->pixels, _backgroundScreen->pixels, 64000);
+	memcpy(_workScreen->getPixels(), _backgroundScreen->getPixels(), 64000);
 
 	drawSpriteChannels(_backgroundScreenDrawCtx, 3, 0);
 	drawSpriteChannels(_workScreenDrawCtx, 1, 2);
 
-	_vm->_system->copyRectToScreen(_workScreen->pixels, _workScreen->pitch, 0, 0, _workScreen->w, _workScreen->h);
+	_vm->_system->copyRectToScreen(_workScreen->getPixels(), _workScreen->pitch, 0, 0, _workScreen->w, _workScreen->h);
 	_vm->_screen->updateScreenAndWait(10);
 }
 
@@ -368,6 +370,9 @@ uint16 Screen::drawFlex(uint16 flexIndex, int16 x, int16 y, int16 flipX, int16 f
 		return 0;
 
 	PictureResource *flex = _vm->_res->getPicture(flexIndex);
+	if (!flex)
+		error("Failed to find picture %d", flexIndex);
+
 	Graphics::Surface *sourceSurface = flex->getPicture();
 
 	drawSurface(sourceSurface, x, y, flipX, flipY, mask, clipInfo);
@@ -593,7 +598,7 @@ void Screen::show() {
 		return;
 
 	drawSpriteChannels(_backgroundScreenDrawCtx, 3, 0);
-	memcpy(_workScreen->pixels, _backgroundScreen->pixels, 64000);
+	memcpy(_workScreen->getPixels(), _backgroundScreen->getPixels(), 64000);
 	drawSpriteChannels(_workScreenDrawCtx, 1, 2);
 
 	_fx->run(_visualEffectNum, _workScreen, _palette, _newPalette, _paletteColorCount);
@@ -775,7 +780,7 @@ void Screen::unlockScreen() {
 }
 
 void Screen::showWorkScreen() {
-	_vm->_system->copyRectToScreen(_workScreen->pixels, _workScreen->pitch, 0, 0, _workScreen->w, _workScreen->h);
+	_vm->_system->copyRectToScreen(_workScreen->getPixels(), _workScreen->pitch, 0, 0, _workScreen->w, _workScreen->h);
 }
 
 void Screen::copyRectToScreen(const void *buf, int pitch, int x, int y, int w, int h) {

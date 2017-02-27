@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -29,32 +29,42 @@
 #include "agi/sound_pcjr.h"
 
 #include "common/textconsole.h"
+#include "audio/mixer.h"
 
 namespace Agi {
+
+SoundGen::SoundGen(AgiBase *vm, Audio::Mixer *pMixer) : _vm(vm), _mixer(pMixer) {
+	_sampleRate = pMixer->getOutputRate();
+	_soundHandle = new Audio::SoundHandle();
+}
+
+SoundGen::~SoundGen() {
+	delete _soundHandle;
+}
 
 //
 // TODO: add support for variable sampling rate in the output device
 //
 
-AgiSound *AgiSound::createFromRawResource(uint8 *data, uint32 len, int resnum, SoundMgr &manager, int soundemu) {
+AgiSound *AgiSound::createFromRawResource(uint8 *data, uint32 len, int resnum, int soundemu) {
 	if (data == NULL || len < 2) // Check for too small resource or no resource at all
 		return NULL;
 	uint16 type = READ_LE_UINT16(data);
 
 	// For V1 sound resources
 	if (type != AGI_SOUND_SAMPLE && (type & 0xFF) == 0x01)
-		return new PCjrSound(data, len, resnum, manager);
+		return new PCjrSound(data, len, resnum);
 
 	switch (type) { // Create a sound object based on the type
 	case AGI_SOUND_SAMPLE:
-		return new IIgsSample(data, len, resnum, manager);
+		return new IIgsSample(data, len, resnum);
 	case AGI_SOUND_MIDI:
-		return new IIgsMidi(data, len, resnum, manager);
+		return new IIgsMidi(data, len, resnum);
 	case AGI_SOUND_4CHN:
 		if (soundemu == SOUND_EMU_MIDI) {
-			return new MIDISound(data, len, resnum, manager);
+			return new MIDISound(data, len, resnum);
 		} else {
-			return new PCjrSound(data, len, resnum, manager);
+			return new PCjrSound(data, len, resnum);
 		}
 	}
 
@@ -62,7 +72,7 @@ AgiSound *AgiSound::createFromRawResource(uint8 *data, uint32 len, int resnum, S
 	return NULL;
 }
 
-PCjrSound::PCjrSound(uint8 *data, uint32 len, int resnum, SoundMgr &manager) : AgiSound(manager) {
+PCjrSound::PCjrSound(uint8 *data, uint32 len, int resnum) : AgiSound() {
 	_data = data; // Save the resource pointer
 	_len  = len;  // Save the resource's length
 	_type = READ_LE_UINT16(data); // Read sound resource's type
@@ -140,7 +150,7 @@ void SoundMgr::startSound(int resnum, int flag) {
 	if (_vm->getVersion() < 0x2000) {
 		_vm->_game.vars[_endflag] = 0;
 	} else {
-		_vm->setflag(_endflag, false);
+		_vm->setFlag(_endflag, false);
 	}
 }
 
@@ -154,32 +164,22 @@ void SoundMgr::stopSound() {
 		_playingSound = -1;
 	}
 
-	// This is probably not needed most of the time, but there also should
-	// not be any harm doing it, so do it anyway.
+	// This is needed all the time, some games wait until music got played and when a sound/music got stopped early
+	// it would otherwise block the game (for example Death Angel jingle in back door poker room in Police Quest 1, room 71)
 	if (_endflag != -1) {
 		if (_vm->getVersion() < 0x2000) {
 			_vm->_game.vars[_endflag] = 1;
 		} else {
-			_vm->setflag(_endflag, true);
+			_vm->setFlag(_endflag, true);
 		}
 	}
 
 	_endflag = -1;
 }
 
-int SoundMgr::initSound() {
-	return -1;
-}
-
-void SoundMgr::deinitSound() {
-	stopSound();
-
-	delete _soundGen;
-}
-
 void SoundMgr::soundIsFinished() {
 	if (_endflag != -1)
-		_vm->setflag(_endflag, true);
+		_vm->setFlag(_endflag, true);
 
 	if (_playingSound != -1)
 		_vm->_game.sounds[_playingSound]->stop();
@@ -193,6 +193,7 @@ SoundMgr::SoundMgr(AgiBase *agi, Audio::Mixer *pMixer) {
 	_playingSound = -1;
 
 	switch (_vm->_soundemu) {
+	default:
 	case SOUND_EMU_NONE:
 	case SOUND_EMU_AMIGA:
 	case SOUND_EMU_MAC:
@@ -219,6 +220,9 @@ void SoundMgr::setVolume(uint8 volume) {
 }
 
 SoundMgr::~SoundMgr() {
+	stopSound();
+
+	delete _soundGen;
 }
 
 } // End of namespace Agi

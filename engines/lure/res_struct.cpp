@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -1217,26 +1217,19 @@ void BarmanLists::loadFromStream(Common::ReadStream *stream) {
 // String list resource class
 
 void StringList::load(MemoryBlock *data) {
-	_data = Memory::allocate(data->size());
-	_data->copyFrom(data);
+	// Get the number of entries
+	uint numEntries = READ_LE_UINT16(data->data());
 
-	_numEntries = READ_LE_UINT16(_data->data());
-	char *p = (char *) _data->data() + sizeof(uint16);
-
-	_entries = (char **) Memory::alloc(_numEntries * sizeof(char *));
-
-	for (int index = 0; index < _numEntries; ++index) {
-		_entries[index] = p;
+	// Iterate through loading the strings one at a time
+	const char *p = (const char *)data->data() + sizeof(uint16);
+	for (uint index = 0; index < numEntries; ++index) {
+		_entries.push_back(p);
 		p += strlen(p) + 1;
 	}
 }
 
 void StringList::clear() {
-	if (_numEntries != 0) {
-		Memory::dealloc(_entries);
-		delete _data;
-		_numEntries = 0;
-	}
+	_entries.clear();
 }
 
 // Field list and miscellaneous variables
@@ -1262,7 +1255,7 @@ bool ValueTableData::isKnownField(uint16 fieldIndex) {
 }
 
 uint16 ValueTableData::getField(uint16 fieldIndex) {
-	if (fieldIndex > NUM_VALUE_FIELDS)
+	if (fieldIndex >= NUM_VALUE_FIELDS)
 		error("Invalid field index specified %d", fieldIndex);
 //	if (!isKnownField(fieldIndex))
 //		warning("Unknown field index %d in GET_FIELD opcode", fieldIndex);
@@ -1274,7 +1267,7 @@ uint16 ValueTableData::getField(FieldName fieldName) {
 }
 
 void ValueTableData::setField(uint16 fieldIndex, uint16 value) {
-	if (fieldIndex > NUM_VALUE_FIELDS)
+	if (fieldIndex >= NUM_VALUE_FIELDS)
 		error("Invalid field index specified %d", fieldIndex);
 	_fieldList[fieldIndex] = value;
 //	if (!isKnownField(fieldIndex))

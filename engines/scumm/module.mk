@@ -7,6 +7,7 @@ MODULE_OBJS := \
 	bomp.o \
 	boxes.o \
 	camera.o \
+	cdda.o \
 	charset.o \
 	charset-fontdata.o \
 	costume.o \
@@ -27,6 +28,7 @@ MODULE_OBJS := \
 	imuse/imuse_part.o \
 	imuse/imuse_player.o \
 	imuse/instrument.o \
+	imuse/mac_m68k.o \
 	imuse/pcspk.o \
 	imuse/sysex_samnmax.o \
 	imuse/sysex_scumm.o \
@@ -34,19 +36,23 @@ MODULE_OBJS := \
 	midiparser_ro.o \
 	object.o \
 	palette.o \
-	player_apple2.o \
-	player_mod.o \
-	player_nes.o \
-	player_pce.o \
-	player_sid.o \
-	player_towns.o \
-	player_v1.o \
-	player_v2.o \
-	player_v2a.o \
-	player_v2base.o \
-	player_v2cms.o \
-	player_v3a.o \
-	player_v4a.o \
+	players/player_ad.o \
+	players/player_apple2.o \
+	players/player_mac.o \
+	players/player_mod.o \
+	players/player_nes.o \
+	players/player_pce.o \
+	players/player_sid.o \
+	players/player_towns.o \
+	players/player_v1.o \
+	players/player_v2.o \
+	players/player_v2a.o \
+	players/player_v2base.o \
+	players/player_v2cms.o \
+	players/player_v3a.o \
+	players/player_v3m.o \
+	players/player_v4a.o \
+	players/player_v5m.o \
 	resource_v2.o \
 	resource_v3.o \
 	resource_v4.o \
@@ -130,9 +136,25 @@ MODULE_OBJS += \
 	he/logic/basketball.o \
 	he/logic/football.o \
 	he/logic/funshop.o \
-	he/logic/moonbase.o \
+	he/logic/moonbase_logic.o \
 	he/logic/puttrace.o \
-	he/logic/soccer.o
+	he/logic/soccer.o \
+	he/moonbase/ai_defenseunit.o \
+	he/moonbase/ai_main.o \
+	he/moonbase/ai_node.o \
+	he/moonbase/ai_targetacquisition.o \
+	he/moonbase/ai_traveller.o \
+	he/moonbase/ai_tree.o \
+	he/moonbase/ai_types.o \
+	he/moonbase/ai_weapon.o \
+	he/moonbase/distortion.o \
+	he/moonbase/moonbase.o \
+	he/moonbase/moonbase_fow.o
+
+ifdef USE_SDL_NET
+MODULE_OBJS += \
+	he/moonbase/net_main.o
+endif
 endif
 
 # This module can be built as a plugin

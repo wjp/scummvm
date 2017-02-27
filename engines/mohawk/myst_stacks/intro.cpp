@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -27,8 +27,6 @@
 #include "mohawk/sound.h"
 #include "mohawk/video.h"
 #include "mohawk/myst_stacks/intro.h"
-
-#include "gui/message.h"
 
 namespace Mohawk {
 namespace MystStacks {
@@ -98,10 +96,16 @@ void Intro::introMovies_run() {
 	// Play Intro Movies
 	// This is all quite messy...
 
+	VideoHandle handle;
+
 	switch (_introStep) {
 	case 0:
 		_introStep = 1;
-		_vm->_video->playMovie(_vm->wrapMovieFilename("broder", kIntroStack));
+		handle = _vm->_video->playMovie(_vm->wrapMovieFilename("broder", kIntroStack));
+		if (!handle)
+			error("Failed to open broder movie");
+
+		handle->center();
 		break;
 	case 1:
 		if (!_vm->_video->isVideoPlaying())
@@ -109,7 +113,11 @@ void Intro::introMovies_run() {
 		break;
 	case 2:
 		_introStep = 3;
-		_vm->_video->playMovie(_vm->wrapMovieFilename("cyanlogo", kIntroStack));
+		handle = _vm->_video->playMovie(_vm->wrapMovieFilename("cyanlogo", kIntroStack));
+		if (!handle)
+			error("Failed to open cyanlogo movie");
+
+		handle->center();
 		break;
 	case 3:
 		if (!_vm->_video->isVideoPlaying())
@@ -118,8 +126,13 @@ void Intro::introMovies_run() {
 	case 4:
 		_introStep = 5;
 
-		if (!(_vm->getFeatures() & GF_DEMO)) // The demo doesn't have the intro video
-			_vm->_video->playMovie(_vm->wrapMovieFilename("intro", kIntroStack));
+		if (!(_vm->getFeatures() & GF_DEMO)) { // The demo doesn't have the intro video
+			handle = _vm->_video->playMovie(_vm->wrapMovieFilename("intro", kIntroStack));
+			if (!handle)
+				error("Failed to open intro movie");
+
+			handle->center();
+		}
 		break;
 	case 5:
 		if (!_vm->_video->isVideoPlaying())
@@ -127,9 +140,9 @@ void Intro::introMovies_run() {
 		break;
 	default:
 		if (_vm->getFeatures() & GF_DEMO)
-			_vm->changeToCard(2001, true);
+			_vm->changeToCard(2001, kTransitionRightToLeft);
 		else
-			_vm->changeToCard(2, true);
+			_vm->changeToCard(2, kTransitionRightToLeft);
 	}
 }
 
@@ -148,14 +161,14 @@ void Intro::mystLinkBook_run() {
 			_vm->_gfx->copyBackBufferToScreen(Common::Rect(544, 333));
 		}
 	} else if (!_linkBookMovie->isPlaying()) {
-		_vm->changeToCard(5, true);
+		_vm->changeToCard(5, kTransitionRightToLeft);
 	}
 }
 
 void Intro::o_mystLinkBook_init(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Myst link book init", op);
 
-	_linkBookMovie = static_cast<MystResourceType6 *>(_invokingResource);
+	_linkBookMovie = getInvokingResource<MystAreaVideo>();
 	_startTime = 1;
 	_linkBookRunning = true;
 }

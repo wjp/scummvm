@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -108,20 +108,18 @@ bool BinkDecoder::loadStream(Common::SeekableReadStream *stream) {
 	uint32 audioTrackCount = _bink->readUint32LE();
 
 	if (audioTrackCount > 0) {
-		_audioTracks.reserve(audioTrackCount);
+		_audioTracks.resize(audioTrackCount);
 
 		_bink->skip(4 * audioTrackCount);
 
 		// Reading audio track properties
 		for (uint32 i = 0; i < audioTrackCount; i++) {
-			AudioInfo track;
+			AudioInfo &track = _audioTracks[i];
 
 			track.sampleRate = _bink->readUint16LE();
 			track.flags      = _bink->readUint16LE();
 
-			_audioTracks.push_back(track);
-
-			initAudioTrack(_audioTracks[i]);
+			initAudioTrack(track);
 		}
 
 		_bink->skip(4 * audioTrackCount);
@@ -189,7 +187,7 @@ void BinkDecoder::readNextPacket() {
 			audio.sampleCount = _bink->readUint32LE() / (2 * audio.channels);
 
 			audio.bits = new Common::BitStream32LELSB(new Common::SeekableSubReadStream(_bink,
-					audioPacketStart + 4, audioPacketEnd), true);
+					audioPacketStart + 4, audioPacketEnd), DisposeAfterUse::YES);
 
 			audioTrack->decodePacket();
 
@@ -206,12 +204,22 @@ void BinkDecoder::readNextPacket() {
 	uint32 videoPacketEnd   = _bink->pos() + frameSize;
 
 	frame.bits = new Common::BitStream32LELSB(new Common::SeekableSubReadStream(_bink,
-			videoPacketStart, videoPacketEnd), true);
+			videoPacketStart, videoPacketEnd), DisposeAfterUse::YES);
 
 	videoTrack->decodePacket(frame);
 
 	delete frame.bits;
 	frame.bits = 0;
+}
+
+VideoDecoder::AudioTrack *BinkDecoder::getAudioTrack(int index) {
+	// Bink audio track indexes are relative to the first audio track
+	Track *track = getTrack(index + 1);
+
+	if (!track || track->getTrackType() != Track::kTrackTypeAudio)
+		return 0;
+
+	return (AudioTrack *)track;
 }
 
 BinkDecoder::VideoFrame::VideoFrame() : bits(0) {
@@ -236,7 +244,7 @@ BinkDecoder::AudioInfo::~AudioInfo() {
 
 BinkDecoder::BinkVideoTrack::BinkVideoTrack(uint32 width, uint32 height, const Graphics::PixelFormat &format, uint32 frameCount, const Common::Rational &frameRate, bool swapPlanes, bool hasAlpha, uint32 id) :
 		_frameCount(frameCount), _frameRate(frameRate), _swapPlanes(swapPlanes), _hasAlpha(hasAlpha), _id(id) {
-	_curFrame = -1;	
+	_curFrame = -1;
 
 	for (int i = 0; i < 16; i++)
 		_huffman[i] = 0;
@@ -557,8 +565,8 @@ void BinkDecoder::BinkVideoTrack::initBundles() {
 		_bundles[i].dataEnd = _bundles[i].data + blocks * 64;
 	}
 
-	uint32 cbw[2] = { (_surface.w + 7) >> 3, (_surface.w  + 15) >> 4 };
-	uint32 cw [2] = {  _surface.w          ,  _surface.w        >> 1 };
+	uint32 cbw[2] = { (uint32)((_surface.w + 7) >> 3), (uint32)((_surface.w  + 15) >> 4) };
+	uint32 cw [2] = { (uint32)( _surface.w          ), (uint32)( _surface.w        >> 1) };
 
 	// Calculate the lengths of an element count in bits
 	for (int i = 0; i < 2; i++) {

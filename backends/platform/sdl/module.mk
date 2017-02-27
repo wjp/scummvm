@@ -1,8 +1,8 @@
 MODULE := backends/platform/sdl
 
 MODULE_OBJS := \
-	main.o \
-	sdl.o
+	sdl.o \
+	sdl-window.o
 
 ifdef POSIX
 MODULE_OBJS += \
@@ -14,12 +14,14 @@ ifdef MACOSX
 MODULE_OBJS += \
 	macosx/macosx-main.o \
 	macosx/macosx.o \
+	macosx/macosx_wrapper.o \
 	macosx/appmenu_osx.o
 endif
 
 ifdef WIN32
 MODULE_OBJS += \
 	win32/win32-main.o \
+	win32/win32-window.o \
 	win32/win32.o
 endif
 

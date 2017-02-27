@@ -8,20 +8,20 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  */
 
-#ifndef TONY_H
-#define TONY_H
+#ifndef TONY_TONY_H
+#define TONY_TONY_H
 
 #include "common/scummsys.h"
 #include "common/system.h"
@@ -31,6 +31,7 @@
 #include "common/random.h"
 #include "common/util.h"
 #include "engines/engine.h"
+#include "gui/debugger.h"
 
 #include "tony/mpal/mpal.h"
 #include "tony/mpal/memory.h"
@@ -69,9 +70,9 @@ enum {
 
 struct TonyGameDescription;
 
-#define MAX_SFX_CHANNELS    32
+#define MAX_SFX_CHANNELS 32
 #define TONY_DAT_VER_MAJ 0
-#define TONY_DAT_VER_MIN 1
+#define TONY_DAT_VER_MIN 3
 
 struct VoiceHeader {
 	int _offset;
@@ -103,11 +104,13 @@ public:
 	RMResUpdate _resUpdate;
 	uint32 _hEndOfFrame;
 	Common::File _vdbFP;
+	SoundCodecs _vdbCodec;
 	Common::Array<VoiceHeader> _voices;
 	FPSound _theSound;
 	Common::List<FPSfx *> _activeSfx;
 	Globals _globals;
 	Debugger *_debugger;
+	GUI::Debugger *getDebugger() { return _debugger; }
 
 	int16 _cTableDialog[256];
 	int16 _lTableDialog[256];
@@ -169,7 +172,6 @@ public:
 
 	void play();
 	void close();
-	void abortGame();
 
 	void getDataDirectory(DataDir dir, char *path);
 
@@ -240,4 +242,4 @@ extern TonyEngine *g_vm;
 
 } // End of namespace Tony
 
-#endif /* TONY_H */
+#endif /* TONY_TONY_H */

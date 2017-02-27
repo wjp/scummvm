@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -28,7 +28,6 @@
 #include "mohawk/myst_stacks/credits.h"
 
 #include "common/system.h"
-#include "gui/message.h"
 
 namespace Mohawk {
 namespace MystStacks {
@@ -37,6 +36,7 @@ namespace MystStacks {
 
 Credits::Credits(MohawkEngine_Myst *vm) : MystScriptParser(vm) {
 	setupOpcodes();
+	_curImage = 0;
 }
 
 Credits::~Credits() {
@@ -66,8 +66,10 @@ void Credits::runPersistentScripts() {
 		_curImage++;
 
 		// After the 6th image has shown, it's time to quit
-		if (_curImage == 7)
+		if (_curImage == 7) {
 			_vm->quitGame();
+			return;
+		}
 
 		// Draw next image
 		_vm->drawCardBackground();

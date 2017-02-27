@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #ifndef GUI_WIDGETS_TAB_H
@@ -27,6 +28,11 @@
 #include "common/array.h"
 
 namespace GUI {
+
+enum {
+	kTabForwards = 1,
+	kTabBackwards = -1
+};
 
 class TabWidget : public Widget {
 	typedef Common::String String;
@@ -95,6 +101,8 @@ public:
 	virtual void handleMouseDown(int x, int y, int button, int clickCount);
 	virtual bool handleKeyDown(Common::KeyState state);
 	virtual void handleCommand(CommandSender *sender, uint32 cmd, uint32 data);
+	virtual int getFirstVisible();
+	virtual void setFirstVisible(int tabID); 
 
 	virtual void reflowLayout();
 
@@ -104,10 +112,13 @@ protected:
 	// We overload getChildY to make sure child widgets are positioned correctly.
 	// Essentially this compensates for the space taken up by the tab title header.
 	virtual int16	getChildY() const;
+	virtual uint16	getHeight() const;
 
 	virtual void drawWidget();
 
 	virtual Widget *findWidget(int x, int y);
+
+	virtual void adjustTabs(int value);
 };
 
 } // End of namespace GUI

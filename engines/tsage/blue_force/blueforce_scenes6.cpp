@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -21,7 +21,6 @@
  */
 
 #include "tsage/blue_force/blueforce_scenes6.h"
-#include "tsage/blue_force/blueforce_dialogs.h"
 #include "tsage/scenes.h"
 #include "tsage/tsage.h"
 #include "tsage/staticres.h"
@@ -78,8 +77,7 @@ void Scene600::Action1::signal() {
 			pObj->animate(ANIM_MODE_NONE, NULL);
 		}
 
-		BF_GLOBALS._screenSurface.fillRect(BF_GLOBALS._screenSurface.getBounds(), 0);
-		BF_GLOBALS._v51C44 = 1;
+		BF_GLOBALS._screen.fillRect(BF_GLOBALS._screen.getBounds(), 0);
 		scene->loadScene(999);
 		setDelay(5);
 		break;
@@ -88,7 +86,6 @@ void Scene600::Action1::signal() {
 		setDelay(5);
 		break;
 	case 7:
-		BF_GLOBALS._v51C44 = 0;
 		remove();
 		break;
 	default:
@@ -275,9 +272,9 @@ bool Scene666::Item1::startAction(CursorType action, Event &event) {
 void Scene666::postInit(SceneObjectList *OwnerList) {
 	BF_GLOBALS._sound1.play(27);
 	SceneExt::postInit();
-	BF_GLOBALS._interfaceY = 200;
+	BF_GLOBALS._interfaceY = SCREEN_HEIGHT;
 	loadScene(999);
-	BF_GLOBALS._screenSurface.fillRect(BF_GLOBALS._screenSurface.getBounds(), 0);
+	BF_GLOBALS._screen.fillRect(BF_GLOBALS._screen.getBounds(), 0);
 
 	if (BF_GLOBALS._dayNumber == 0) {
 		BF_GLOBALS._dayNumber = 1;

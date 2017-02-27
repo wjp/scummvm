@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -43,7 +43,8 @@ protected:
 	Parallaction *_vm;
 
 public:
-	SplashInputState_NS(Parallaction *vm, const Common::String &name, MenuInputHelper *helper) : MenuInputState(name, helper), _vm(vm)  {
+	SplashInputState_NS(Parallaction *vm, const Common::String &name, MenuInputHelper *helper) : MenuInputState(name, helper), _vm(vm),
+			_timeOut(0), _startTime(0) {
 	}
 
 	virtual MenuInputState* run() {
@@ -117,6 +118,7 @@ public:
 		_allowChoice = false;
 		_nextState = "selectgame";
 		_label = 0;
+		_blocks = 0;
 
 		_dosLanguageSelectBlocks[0] = Common::Rect(  80, 110, 128, 180 );	// Italian
 		_dosLanguageSelectBlocks[1] = Common::Rect( 129,  85, 177, 155 );	// French
@@ -297,7 +299,7 @@ class LoadGameInputState_NS : public MenuInputState {
 	Parallaction *_vm;
 
 public:
-	LoadGameInputState_NS(Parallaction *vm, MenuInputHelper *helper) : MenuInputState("loadgame", helper), _vm(vm) { }
+	LoadGameInputState_NS(Parallaction *vm, MenuInputHelper *helper) : MenuInputState("loadgame", helper), _vm(vm), _result(false) { }
 
 	virtual MenuInputState* run() {
 		if (!_result) {
@@ -414,7 +416,7 @@ class SelectCharacterInputState_NS : public MenuInputState {
 	#define CHAR_DONNA	1
 	#define CHAR_DOUGH	2
 
- 	Common::Rect _codeSelectBlocks[9];
+	Common::Rect _codeSelectBlocks[9];
 	Common::Rect _codeTrueBlocks[9];
 
 	Parallaction_ns *_vm;
@@ -475,6 +477,11 @@ public:
 		_block.create(BLOCK_WIDTH, BLOCK_HEIGHT, Graphics::PixelFormat::createFormatCLUT8());
 		_labels[0] = 0;
 		_labels[1] = 0;
+
+		_fail = false;
+		_len = 0;
+		_startTime = 0;
+		_state = 0;
 
 		_codeSelectBlocks[0] = Common::Rect( 111, 129, 127, 153 );	// na
 		_codeSelectBlocks[1] = Common::Rect( 128, 120, 144, 144 );	// wa
@@ -688,6 +695,9 @@ public:
 	ShowCreditsInputState_NS(Parallaction *vm, MenuInputHelper *helper) : MenuInputState("showcredits", helper), _vm(vm) {
 		_labels[0] = 0;
 		_labels[1] = 0;
+
+		_current = 0;
+		_startTime = 0;
 	}
 
 	~ShowCreditsInputState_NS() {
@@ -787,7 +797,7 @@ public:
 		}
 
 		destroyLabels();
-		_engineFlags &= ~kEngineBlockInput;
+		g_engineFlags &= ~kEngineBlockInput;
 		return _helper->getState("selectcharacter");
 	}
 
@@ -826,6 +836,8 @@ public:
 		_labels[1] = 0;
 		_labels[2] = 0;
 		_labels[3] = 0;
+
+		_allPartsComplete = false;
 	}
 
 	void destroyLabels() {

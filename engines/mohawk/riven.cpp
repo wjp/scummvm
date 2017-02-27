@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -25,6 +25,7 @@
 #include "common/keyboard.h"
 #include "common/translation.h"
 #include "common/system.h"
+#include "gui/saveload.h"
 
 #include "mohawk/cursors.h"
 #include "mohawk/installer_archive.h"
@@ -33,8 +34,8 @@
 #include "mohawk/riven_external.h"
 #include "mohawk/riven_graphics.h"
 #include "mohawk/riven_saveload.h"
+#include "mohawk/riven_sound.h"
 #include "mohawk/dialogs.h"
-#include "mohawk/sound.h"
 #include "mohawk/video.h"
 #include "mohawk/console.h"
 
@@ -54,9 +55,20 @@ MohawkEngine_Riven::MohawkEngine_Riven(OSystem *syst, const MohawkGameDescriptio
 	_gameOver = false;
 	_activatedSLST = false;
 	_ignoreNextMouseUp = false;
-	_extrasFile = 0;
-	_curStack = aspit;
-	_hotspots = 0;
+	_extrasFile = nullptr;
+	_curStack = kStackUnknown;
+	_hotspots = nullptr;
+	_gfx = nullptr;
+	_sound = nullptr;
+	_externalScriptHandler = nullptr;
+	_rnd = nullptr;
+	_scriptMan = nullptr;
+	_console = nullptr;
+	_saveLoad = nullptr;
+	_optionsDialog = nullptr;
+	_curCard = 0;
+	_hotspotCount = 0;
+	_curHotspot = -1;
 	removeTimer();
 
 	// NOTE: We can never really support CD swapping. All of the music files
@@ -70,6 +82,7 @@ MohawkEngine_Riven::MohawkEngine_Riven(OSystem *syst, const MohawkGameDescriptio
 	SearchMan.addSubDirectoryMatching(gameDataDir, "data");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "exe");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "assets1");
+	SearchMan.addSubDirectoryMatching(gameDataDir, "program");
 
 	g_atrusJournalRect1 = new Common::Rect(295, 402, 313, 426);
 	g_atrusJournalRect2 = new Common::Rect(259, 402, 278, 426);
@@ -81,6 +94,7 @@ MohawkEngine_Riven::MohawkEngine_Riven(OSystem *syst, const MohawkGameDescriptio
 }
 
 MohawkEngine_Riven::~MohawkEngine_Riven() {
+	delete _sound;
 	delete _gfx;
 	delete _console;
 	delete _externalScriptHandler;
@@ -112,6 +126,7 @@ Common::Error MohawkEngine_Riven::run() {
 		SearchMan.add("arcriven.z", &_installerArchive, 0, false);
 
 	_gfx = new RivenGraphics(this);
+	_sound = new RivenSoundManager(this);
 	_console = new RivenConsole(this);
 	_saveLoad = new RivenSaveLoad(this, _saveFileMan);
 	_externalScriptHandler = new RivenExternal(this);
@@ -132,8 +147,8 @@ Common::Error MohawkEngine_Riven::run() {
 
 	// We need to have a cursor source, or the game won't work
 	if (!_cursor->hasSource()) {
-		Common::String message = "You're missing a Riven executable. The Windows executable is 'riven.exe' or 'rivendmo.exe'. ";
-		message += "Using the 'arcriven.z' installer file also works. In addition, you can use the Mac 'Riven' executable.";
+		Common::String message = _("You're missing a Riven executable. The Windows executable is 'riven.exe' or 'rivendmo.exe'. ");
+		message += _("Using the 'arcriven.z' installer file also works. In addition, you can use the Mac 'Riven' executable.");
 		GUIErrorMessage(message);
 		warning("%s", message.c_str());
 		return Common::kNoGameDataFoundError;
@@ -144,7 +159,7 @@ Common::Error MohawkEngine_Riven::run() {
 
 	// We need extras.mhk for inventory images, marble images, and credits images
 	if (!_extrasFile->openFile("extras.mhk")) {
-		Common::String message = "You're missing 'extras.mhk'. Using the 'arcriven.z' installer file also works.";
+		Common::String message = _("You're missing 'extras.mhk'. Using the 'arcriven.z' installer file also works.");
 		GUIErrorMessage(message);
 		warning("%s", message.c_str());
 		return Common::kNoGameDataFoundError;
@@ -161,23 +176,20 @@ Common::Error MohawkEngine_Riven::run() {
 	// Let's begin, shall we?
 	if (getFeatures() & GF_DEMO) {
 		// Start the demo off with the videos
-		changeToStack(aspit);
+		changeToStack(kStackAspit);
 		changeToCard(6);
 	} else if (ConfMan.hasKey("save_slot")) {
 		// Load game from launcher/command line if requested
-		uint32 gameToLoad = ConfMan.getInt("save_slot");
-		Common::StringArray savedGamesList = _saveLoad->generateSaveGameList();
-		if (gameToLoad > savedGamesList.size())
-			error ("Could not find saved game");
+		int gameToLoad = ConfMan.getInt("save_slot");
 
 		// Attempt to load the game. On failure, just send us to the main menu.
-		if (_saveLoad->loadGame(savedGamesList[gameToLoad]).getCode() != Common::kNoError) {
-			changeToStack(aspit);
+		if (_saveLoad->loadGame(gameToLoad).getCode() != Common::kNoError) {
+			changeToStack(kStackAspit);
 			changeToCard(1);
 		}
 	} else {
 		// Otherwise, start us off at aspit's card 1 (the main menu)
-        changeToStack(aspit);
+		changeToStack(kStackAspit);
 		changeToCard(1);
 	}
 
@@ -191,6 +203,7 @@ Common::Error MohawkEngine_Riven::run() {
 void MohawkEngine_Riven::handleEvents() {
 	// Update background running things
 	checkTimer();
+	_sound->updateSLST();
 	bool needsUpdate = _gfx->runScheduledWaterEffects();
 	needsUpdate |= _video->updateMovies();
 
@@ -250,21 +263,23 @@ void MohawkEngine_Riven::handleEvents() {
 				break;
 			case Common::KEYCODE_F5:
 				runDialog(*_optionsDialog);
+				if (_optionsDialog->getLoadSlot() >= 0)
+					loadGameState(_optionsDialog->getLoadSlot());
 				updateZipMode();
 				break;
 			case Common::KEYCODE_r:
 				// Return to the main menu in the demo on ctrl+r
 				if (event.kbd.flags & Common::KBD_CTRL && getFeatures() & GF_DEMO) {
-					if (_curStack != aspit)
-						changeToStack(aspit);
+					if (_curStack != kStackAspit)
+						changeToStack(kStackAspit);
 					changeToCard(1);
 				}
 				break;
 			case Common::KEYCODE_p:
 				// Play the intro videos in the demo on ctrl+p
 				if (event.kbd.flags & Common::KBD_CTRL && getFeatures() & GF_DEMO) {
-					if (_curStack != aspit)
-						changeToStack(aspit);
+					if (_curStack != kStackAspit)
+						changeToStack(kStackAspit);
 					changeToCard(6);
 				}
 				break;
@@ -343,20 +358,22 @@ struct RivenSpecialChange {
 	uint32 startCardRMAP;
 	byte targetStack;
 	uint32 targetCardRMAP;
-} rivenSpecialChange[] = {
-	{ aspit,  0x1f04, ospit,  0x44ad },		// Trap Book
-	{ bspit, 0x1c0e7, ospit,  0x2e76 },		// Dome Linking Book
-	{ gspit, 0x111b1, ospit,  0x2e76 },		// Dome Linking Book
-	{ jspit, 0x28a18, rspit,   0xf94 },		// Tay Linking Book
-	{ jspit, 0x26228, ospit,  0x2e76 },		// Dome Linking Book
-	{ ospit,  0x5f0d, pspit,  0x3bf0 },		// Return from 233rd Age
-	{ ospit,  0x470a, jspit, 0x1508e },		// Return from 233rd Age
-	{ ospit,  0x5c52, gspit, 0x10bea },		// Return from 233rd Age
-	{ ospit,  0x5d68, bspit, 0x1adfd },		// Return from 233rd Age
-	{ ospit,  0x5e49, tspit,   0xe87 },		// Return from 233rd Age
-	{ pspit,  0x4108, ospit,  0x2e76 },		// Dome Linking Book
-	{ rspit,  0x32d8, jspit, 0x1c474 },		// Return from Tay
-	{ tspit, 0x21b69, ospit,  0x2e76 }		// Dome Linking Book
+};
+
+static const RivenSpecialChange rivenSpecialChange[] = {
+	{ kStackAspit,  0x1f04, kStackOspit,  0x44ad }, // Trap Book
+	{ kStackBspit, 0x1c0e7, kStackOspit,  0x2e76 }, // Dome Linking Book
+	{ kStackGspit, 0x111b1, kStackOspit,  0x2e76 }, // Dome Linking Book
+	{ kStackJspit, 0x28a18, kStackRspit,   0xf94 }, // Tay Linking Book
+	{ kStackJspit, 0x26228, kStackOspit,  0x2e76 }, // Dome Linking Book
+	{ kStackOspit,  0x5f0d, kStackPspit,  0x3bf0 }, // Return from 233rd Age
+	{ kStackOspit,  0x470a, kStackJspit, 0x1508e }, // Return from 233rd Age
+	{ kStackOspit,  0x5c52, kStackGspit, 0x10bea }, // Return from 233rd Age
+	{ kStackOspit,  0x5d68, kStackBspit, 0x1adfd }, // Return from 233rd Age
+	{ kStackOspit,  0x5e49, kStackTspit,   0xe87 }, // Return from 233rd Age
+	{ kStackPspit,  0x4108, kStackOspit,  0x2e76 }, // Dome Linking Book
+	{ kStackRspit,  0x32d8, kStackJspit, 0x1c474 }, // Return from Tay
+	{ kStackTspit, 0x21b69, kStackOspit,  0x2e76 }  // Dome Linking Book
 };
 
 void MohawkEngine_Riven::changeToCard(uint16 dest) {
@@ -556,16 +573,16 @@ void MohawkEngine_Riven::checkInventoryClick() {
 	// In the demo, check if we've clicked the exit button
 	if (getFeatures() & GF_DEMO) {
 		if (g_demoExitRect->contains(mousePos)) {
-			if (_curStack == aspit && _curCard == 1) {
+			if (_curStack == kStackAspit && _curCard == 1) {
 				// From the main menu, go to the "quit" screen
 				changeToCard(12);
-			} else if (_curStack == aspit && _curCard == 12) {
+			} else if (_curStack == kStackAspit && _curCard == 12) {
 				// From the "quit" screen, just quit
 				_gameOver = true;
 			} else {
 				// Otherwise, return to the main menu
-				if (_curStack != aspit)
-					changeToStack(aspit);
+				if (_curStack != kStackAspit)
+					changeToStack(kStackAspit);
 				changeToCard(1);
 			}
 		}
@@ -573,7 +590,7 @@ void MohawkEngine_Riven::checkInventoryClick() {
 	}
 
 	// No inventory shown on aspit
-	if (_curStack == aspit)
+	if (_curStack == kStackAspit)
 		return;
 
 	// Set the return stack/card id's.
@@ -589,31 +606,31 @@ void MohawkEngine_Riven::checkInventoryClick() {
 	if (!hasCathBook) {
 		if (g_atrusJournalRect1->contains(mousePos)) {
 			_gfx->hideInventory();
-			changeToStack(aspit);
+			changeToStack(kStackAspit);
 			changeToCard(5);
 		}
 	} else if (!hasTrapBook) {
 		if (g_atrusJournalRect2->contains(mousePos)) {
 			_gfx->hideInventory();
-			changeToStack(aspit);
+			changeToStack(kStackAspit);
 			changeToCard(5);
 		} else if (g_cathJournalRect2->contains(mousePos)) {
 			_gfx->hideInventory();
-			changeToStack(aspit);
+			changeToStack(kStackAspit);
 			changeToCard(6);
 		}
 	} else {
 		if (g_atrusJournalRect3->contains(mousePos)) {
 			_gfx->hideInventory();
-			changeToStack(aspit);
+			changeToStack(kStackAspit);
 			changeToCard(5);
 		} else if (g_cathJournalRect3->contains(mousePos)) {
 			_gfx->hideInventory();
-			changeToStack(aspit);
+			changeToStack(kStackAspit);
 			changeToCard(6);
 		} else if (g_trapBookRect3->contains(mousePos)) {
 			_gfx->hideInventory();
-			changeToStack(aspit);
+			changeToStack(kStackAspit);
 			changeToCard(7);
 		}
 	}
@@ -698,6 +715,7 @@ void MohawkEngine_Riven::delayAndUpdate(uint32 ms) {
 	uint32 startTime = _system->getMillis();
 
 	while (_system->getMillis() < startTime + ms && !shouldQuit()) {
+		_sound->updateSLST();
 		bool needsUpdate = _gfx->runScheduledWaterEffects();
 		needsUpdate |= _video->updateMovies();
 
@@ -721,29 +739,28 @@ void MohawkEngine_Riven::runLoadDialog() {
 }
 
 Common::Error MohawkEngine_Riven::loadGameState(int slot) {
-	return _saveLoad->loadGame(_saveLoad->generateSaveGameList()[slot]);
+	return _saveLoad->loadGame(slot);
 }
 
 Common::Error MohawkEngine_Riven::saveGameState(int slot, const Common::String &desc) {
-	Common::StringArray saveList = _saveLoad->generateSaveGameList();
-
-	if ((uint)slot < saveList.size())
-		_saveLoad->deleteSave(saveList[slot]);
-
-	return _saveLoad->saveGame(desc);
+	return _saveLoad->saveGame(slot, desc);
 }
 
 Common::String MohawkEngine_Riven::getStackName(uint16 stack) const {
 	static const char *rivenStackNames[] = {
-		"aspit",
-		"bspit",
-		"gspit",
-		"jspit",
+		"<unknown>",
 		"ospit",
 		"pspit",
 		"rspit",
-		"tspit"
+		"tspit",
+		"bspit",
+		"gspit",
+		"jspit",
+		"aspit"
 	};
+
+	// Sanity check.
+	assert(stack < ARRAYSIZE(rivenStackNames));
 
 	return rivenStackNames[stack];
 }
@@ -822,7 +839,7 @@ static void sunnersTopStairsTimer(MohawkEngine_Riven *vm) {
 	VideoHandle oldHandle = vm->_video->findVideoHandleRiven(1);
 	uint32 timerTime = 500;
 
-	if (oldHandle == NULL_VID_HANDLE || vm->_video->endOfVideo(oldHandle)) {
+	if (!oldHandle || oldHandle->endOfVideo()) {
 		uint32 &sunnerTime = vm->_vars["jsunnertime"];
 
 		if (sunnerTime == 0) {
@@ -830,7 +847,7 @@ static void sunnersTopStairsTimer(MohawkEngine_Riven *vm) {
 		} else if (sunnerTime < vm->getTotalPlayTime()) {
 			VideoHandle handle = vm->_video->playMovieRiven(vm->_rnd->getRandomNumberRng(1, 3));
 
-			timerTime = vm->_video->getDuration(handle) + vm->_rnd->getRandomNumberRng(2, 15) * 1000;
+			timerTime = handle->getDuration().msecs() + vm->_rnd->getRandomNumberRng(2, 15) * 1000;
 		}
 
 		sunnerTime = timerTime + vm->getTotalPlayTime();
@@ -852,7 +869,7 @@ static void sunnersMidStairsTimer(MohawkEngine_Riven *vm) {
 	VideoHandle oldHandle = vm->_video->findVideoHandleRiven(1);
 	uint32 timerTime = 500;
 
-	if (oldHandle == NULL_VID_HANDLE || vm->_video->endOfVideo(oldHandle)) {
+	if (!oldHandle || oldHandle->endOfVideo()) {
 		uint32 &sunnerTime = vm->_vars["jsunnertime"];
 
 		if (sunnerTime == 0) {
@@ -868,7 +885,7 @@ static void sunnersMidStairsTimer(MohawkEngine_Riven *vm) {
 
 			VideoHandle handle = vm->_video->playMovieRiven(movie);
 
-			timerTime = vm->_video->getDuration(handle) + vm->_rnd->getRandomNumberRng(1, 10) * 1000;
+			timerTime = handle->getDuration().msecs() + vm->_rnd->getRandomNumberRng(1, 10) * 1000;
 		}
 
 		sunnerTime = timerTime + vm->getTotalPlayTime();
@@ -890,7 +907,7 @@ static void sunnersLowerStairsTimer(MohawkEngine_Riven *vm) {
 	VideoHandle oldHandle = vm->_video->findVideoHandleRiven(1);
 	uint32 timerTime = 500;
 
-	if (oldHandle == NULL_VID_HANDLE || vm->_video->endOfVideo(oldHandle)) {
+	if (!oldHandle || oldHandle->endOfVideo()) {
 		uint32 &sunnerTime = vm->_vars["jsunnertime"];
 
 		if (sunnerTime == 0) {
@@ -898,7 +915,7 @@ static void sunnersLowerStairsTimer(MohawkEngine_Riven *vm) {
 		} else if (sunnerTime < vm->getTotalPlayTime()) {
 			VideoHandle handle = vm->_video->playMovieRiven(vm->_rnd->getRandomNumberRng(3, 5));
 
-			timerTime = vm->_video->getDuration(handle) + vm->_rnd->getRandomNumberRng(1, 30) * 1000;
+			timerTime = handle->getDuration().msecs() + vm->_rnd->getRandomNumberRng(1, 30) * 1000;
 		}
 
 		sunnerTime = timerTime + vm->getTotalPlayTime();
@@ -920,7 +937,7 @@ static void sunnersBeachTimer(MohawkEngine_Riven *vm) {
 	VideoHandle oldHandle = vm->_video->findVideoHandleRiven(3);
 	uint32 timerTime = 500;
 
-	if (oldHandle == NULL_VID_HANDLE || vm->_video->endOfVideo(oldHandle)) {
+	if (!oldHandle || oldHandle->endOfVideo()) {
 		uint32 &sunnerTime = vm->_vars["jsunnertime"];
 
 		if (sunnerTime == 0) {
@@ -932,7 +949,7 @@ static void sunnersBeachTimer(MohawkEngine_Riven *vm) {
 			vm->_video->activateMLST(mlstID, vm->getCurCard());
 			VideoHandle handle = vm->_video->playMovieRiven(mlstID);
 
-			timerTime = vm->_video->getDuration(handle) + vm->_rnd->getRandomNumberRng(1, 30) * 1000;
+			timerTime = handle->getDuration().msecs() + vm->_rnd->getRandomNumberRng(1, 30) * 1000;
 		}
 
 		sunnerTime = timerTime + vm->getTotalPlayTime();
@@ -963,7 +980,7 @@ void MohawkEngine_Riven::installCardTimer() {
 }
 
 void MohawkEngine_Riven::doVideoTimer(VideoHandle handle, bool force) {
-	assert(handle != NULL_VID_HANDLE);
+	assert(handle);
 
 	uint16 id = _scriptMan->getStoredMovieOpcodeID();
 
@@ -971,7 +988,7 @@ void MohawkEngine_Riven::doVideoTimer(VideoHandle handle, bool force) {
 		return;
 
 	// Run the opcode if we can at this point
-	if (force || _video->getTime(handle) >= _scriptMan->getStoredMovieOpcodeTime())
+	if (force || handle->getTime() >= _scriptMan->getStoredMovieOpcodeTime())
 		_scriptMan->runStoredMovieOpcode();
 }
 
@@ -997,7 +1014,7 @@ void MohawkEngine_Riven::checkSunnerAlertClick() {
 
 	// If the alert video is no longer playing, we have nothing left to do
 	VideoHandle handle = _video->findVideoHandleRiven(1);
-	if (handle == NULL_VID_HANDLE || _video->endOfVideo(handle))
+	if (!handle || handle->endOfVideo())
 		return;
 
 	sunners = 1;

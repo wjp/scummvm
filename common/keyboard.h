@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -224,12 +224,13 @@ enum {
 	KBD_CTRL  = 1 << 0,
 	KBD_ALT   = 1 << 1,
 	KBD_SHIFT = 1 << 2,
-	KBD_NON_STICKY = (KBD_CTRL|KBD_ALT|KBD_SHIFT),
+	KBD_META  = 1 << 3,
+	KBD_NON_STICKY = (KBD_CTRL|KBD_ALT|KBD_SHIFT|KBD_META),
 
 	// Sticky modifier flags
-	KBD_NUM   = 1 << 3,
-	KBD_CAPS  = 1 << 4,
-	KBD_SCRL  = 1 << 5,
+	KBD_NUM   = 1 << 4,
+	KBD_CAPS  = 1 << 5,
+	KBD_SCRL  = 1 << 6,
 	KBD_STICKY = (KBD_NUM|KBD_CAPS|KBD_SCRL)
 
 };

@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #include "common/util.h"
@@ -69,6 +70,12 @@ void TabWidget::init() {
 }
 
 TabWidget::~TabWidget() {
+	// If widgets were added or removed in the current tab, without tabs
+	// having been switched using setActiveTab() afterward, then the
+	// firstWidget in the _tabs list for the active tab may not be up to
+	// date. So update it now.
+	if (_activeTab != -1)
+		_tabs[_activeTab].firstWidget = _firstWidget;
 	_firstWidget = 0;
 	for (uint i = 0; i < _tabs.size(); ++i) {
 		delete _tabs[i].firstWidget;
@@ -79,7 +86,17 @@ TabWidget::~TabWidget() {
 }
 
 int16 TabWidget::getChildY() const {
+	// NOTE: if you change that, make sure to do the same
+	// changes in the ThemeLayoutTabWidget (gui/ThemeLayout.cpp)
 	return getAbsY() + _tabHeight;
+}
+
+uint16 TabWidget::getHeight() const {
+	// NOTE: if you change that, make sure to do the same
+	// changes in the ThemeLayoutTabWidget (gui/ThemeLayout.cpp)
+	// NOTE: this height is used for clipping, so it *includes*
+	// tabs, because it starts from getAbsY(), not getChildY()
+	return _h + _tabHeight;
 }
 
 int TabWidget::addTab(const String &title) {
@@ -182,6 +199,13 @@ void TabWidget::setActiveTab(int tabID) {
 		}
 		_activeTab = tabID;
 		_firstWidget = _tabs[tabID].firstWidget;
+		
+		// Also ensure the tab is visible in the tab bar
+		if (_firstVisibleTab > tabID)
+			_firstVisibleTab = tabID;
+		else if (_firstVisibleTab + _w / _tabWidth <= tabID)
+			_firstVisibleTab = tabID - _w / _tabWidth + 1;
+
 		_boss->draw();
 	}
 }
@@ -225,14 +249,59 @@ void TabWidget::handleMouseDown(int x, int y, int button, int clickCount) {
 }
 
 bool TabWidget::handleKeyDown(Common::KeyState state) {
-	// TODO: maybe there should be a way to switch between tabs
-	// using the keyboard? E.g. Alt-Shift-Left/Right-Arrow or something
-	// like that.
+	if (state.hasFlags(Common::KBD_SHIFT) && state.keycode == Common::KEYCODE_TAB)
+		adjustTabs(kTabBackwards);
+	else if (state.keycode == Common::KEYCODE_TAB)
+		adjustTabs(kTabForwards);
+
 	return Widget::handleKeyDown(state);
+}
+
+void TabWidget::adjustTabs(int value) {
+	// Determine which tab is next
+	int tabID = _activeTab + value;
+	if (tabID >= (int)_tabs.size())
+		tabID = 0;
+	else if (tabID < 0)
+		tabID = ((int)_tabs.size() - 1);
+
+	// Slides _firstVisibleTab forward to the correct tab
+	int maxTabsOnScreen = (_w / _tabWidth);
+	if (tabID >= maxTabsOnScreen && (_firstVisibleTab + maxTabsOnScreen) < (int)_tabs.size())
+		_firstVisibleTab++;
+
+	// Slides _firstVisibleTab backwards to the correct tab
+	while (tabID < _firstVisibleTab)
+		_firstVisibleTab--;
+
+	setActiveTab(tabID);
+}
+
+int TabWidget::getFirstVisible() {
+	return _firstVisibleTab;
+}
+
+void TabWidget::setFirstVisible(int tabID) {
+	assert(0 <= tabID && tabID < (int)_tabs.size());
+	_firstVisibleTab = tabID;
+	_boss->draw();
 }
 
 void TabWidget::reflowLayout() {
 	Widget::reflowLayout();
+
+	// NOTE: if you change that, make sure to do the same
+	// changes in the ThemeLayoutTabWidget (gui/ThemeLayout.cpp)
+	_tabHeight = g_gui.xmlEval()->getVar("Globals.TabWidget.Tab.Height");
+	_tabWidth = g_gui.xmlEval()->getVar("Globals.TabWidget.Tab.Width");
+	_titleVPad = g_gui.xmlEval()->getVar("Globals.TabWidget.Tab.Padding.Top");
+
+	// If widgets were added or removed in the current tab, without tabs
+	// having been switched using setActiveTab() afterward, then the
+	// firstWidget in the _tabs list for the active tab may not be up to
+	// date. So update it now.
+	if (_activeTab != -1)
+		_tabs[_activeTab].firstWidget = _firstWidget;
 
 	for (uint i = 0; i < _tabs.size(); ++i) {
 		Widget *w = _tabs[i].firstWidget;
@@ -241,10 +310,6 @@ void TabWidget::reflowLayout() {
 			w = w->next();
 		}
 	}
-
-	_tabHeight = g_gui.xmlEval()->getVar("Globals.TabWidget.Tab.Height");
-	_tabWidth = g_gui.xmlEval()->getVar("Globals.TabWidget.Tab.Width");
-	_titleVPad = g_gui.xmlEval()->getVar("Globals.TabWidget.Tab.Padding.Top");
 
 	if (_tabWidth == 0) {
 		_tabWidth = 40;
@@ -280,9 +345,9 @@ void TabWidget::drawWidget() {
 	for (int i = _firstVisibleTab; i < (int)_tabs.size(); ++i) {
 		tabs.push_back(_tabs[i].title);
 	}
-	g_gui.theme()->drawDialogBackground(Common::Rect(_x + _bodyLP, _y + _bodyTP, _x+_w-_bodyRP, _y+_h-_bodyBP), _bodyBackgroundType);
+	g_gui.theme()->drawDialogBackgroundClip(Common::Rect(_x + _bodyLP, _y + _bodyTP, _x+_w-_bodyRP, _y+_h-_bodyBP+_tabHeight), getBossClipRect(), _bodyBackgroundType);
 
-	g_gui.theme()->drawTab(Common::Rect(_x, _y, _x+_w, _y+_h), _tabHeight, _tabWidth, tabs, _activeTab - _firstVisibleTab, 0, _titleVPad);
+	g_gui.theme()->drawTabClip(Common::Rect(_x, _y, _x+_w, _y+_h), getBossClipRect(), _tabHeight, _tabWidth, tabs, _activeTab - _firstVisibleTab, 0, _titleVPad);
 }
 
 void TabWidget::draw() {

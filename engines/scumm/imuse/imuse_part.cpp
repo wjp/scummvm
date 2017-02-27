@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -27,6 +27,7 @@
 #include "common/util.h"
 #include "scumm/imuse/imuse_internal.h"
 #include "scumm/saveload.h"
+#include "scumm/scumm.h"
 
 namespace Scumm {
 
@@ -110,8 +111,19 @@ void Part::saveLoadWithSerializer(Serializer *ser) {
 }
 
 void Part::set_detune(int8 detune) {
-	_detune_eff = clamp((_detune = detune) + _player->getDetune(), -128, 127);
-	sendPitchBend();
+	// Sam&Max does not have detune, so we just ignore this here. We still get
+	// this called, since Sam&Max uses the same controller for a different
+	// purpose.
+	if (_se->_game_id == GID_SAMNMAX) {
+#if 0
+		if (_mc) {
+			_mc->controlChange(17, detune + 0x40);
+		}
+#endif
+	} else {
+		_detune_eff = clamp((_detune = detune) + _player->getDetune(), -128, 127);
+		sendPitchBend();
+	}
 }
 
 void Part::pitchBend(int16 value) {
@@ -365,7 +377,17 @@ void Part::set_instrument(uint b) {
 	_bank = (byte)(b >> 8);
 	if (_bank)
 		error("Non-zero instrument bank selection. Please report this");
-	_instrument.program((byte)b, _player->isMT32());
+	// HACK: Horrible hack to allow tracing of program change source.
+	// The Mac m68k versions of MI2 and Indy4 use a different program "bank"
+	// when it gets program change events through the iMuse SysEx handler.
+	// We emulate this by introducing a special instrument, which sets
+	// the instrument via sysEx_customInstrument. This seems to be
+	// exclusively used for special sound effects like the "spit" sound.
+	if (g_scumm->isMacM68kIMuse()) {
+		_instrument.macSfx(b);
+	} else {
+		_instrument.program((byte)b, _player->isMT32());
+	}
 	if (clearToTransmit())
 		_instrument.send(_mc);
 }

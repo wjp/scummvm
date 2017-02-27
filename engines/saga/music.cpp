@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -30,7 +30,12 @@
 #include "audio/audiostream.h"
 #include "audio/mididrv.h"
 #include "audio/midiparser.h"
+#include "audio/midiparser_qt.h"
+#include "audio/miles.h"
+#include "audio/decoders/flac.h"
+#include "audio/decoders/mp3.h"
 #include "audio/decoders/raw.h"
+#include "audio/decoders/vorbis.h"
 #include "common/config-manager.h"
 #include "common/file.h"
 #include "common/substream.h"
@@ -41,24 +46,51 @@ namespace Saga {
 #define MUSIC_SUNSPOT 26
 
 MusicDriver::MusicDriver() : _isGM(false) {
-
-	MidiPlayer::createDriver();
-
 	MidiDriver::DeviceHandle dev = MidiDriver::detectDevice(MDT_MIDI | MDT_ADLIB | MDT_PREFER_GM);
 	_driverType = MidiDriver::getMusicType(dev);
 
+	switch (_driverType) {
+	case MT_ADLIB:
+		if (Common::File::exists("INSTR.AD") && Common::File::exists("INSTR.OPL")) {
+			_milesAudioMode = true;
+			_driver = Audio::MidiDriver_Miles_AdLib_create("INSTR.AD", "INSTR.OPL");
+		} else if (Common::File::exists("SAMPLE.AD") && Common::File::exists("SAMPLE.OPL")) {
+			_milesAudioMode = true;
+			_driver = Audio::MidiDriver_Miles_AdLib_create("SAMPLE.AD", "SAMPLE.OPL");
+		} else {
+			_milesAudioMode = false;
+			MidiPlayer::createDriver();
+		}
+		break;
+	case MT_MT32:
+		_milesAudioMode = true;
+		_driver = Audio::MidiDriver_Miles_MT32_create("");
+		break;
+	default:
+		_milesAudioMode = false;
+		MidiPlayer::createDriver();
+		break;
+	}
+
 	int retValue = _driver->open();
 	if (retValue == 0) {
-		if (_nativeMT32)
-			_driver->sendMT32Reset();
-		else
-			_driver->sendGMReset();
+		if (_driverType != MT_ADLIB) {
+			if (_driverType == MT_MT32 || _nativeMT32)
+				_driver->sendMT32Reset();
+			else
+				_driver->sendGMReset();
+		}
 
 		_driver->setTimerCallback(this, &timerCallback);
 	}
 }
 
 void MusicDriver::send(uint32 b) {
+	if (_milesAudioMode) {
+		_driver->send(b);
+		return;
+	}
+
 	if ((b & 0xF0) == 0xC0 && !_isGM && !_nativeMT32) {
 		// Remap MT32 instruments to General Midi
 		b = (b & 0xFFFF00FF) | MidiDriver::_mt32ToGm[(b >> 8) & 0xFF] << 8;
@@ -76,23 +108,39 @@ void MusicDriver::play(SagaEngine *vm, ByteArray *buffer, bool loop) {
 	}
 
 	// Check if the game is using XMIDI or SMF music
-	if (vm->getGameId() == GID_IHNM && vm->isMacResources()) {
-		// Just set an XMIDI parser for Mac IHNM for now
+	if (!memcmp(buffer->getBuffer(), "FORM", 4)) {
 		_parser = MidiParser::createParser_XMIDI();
+		// ITE had MT32 mapped instruments
+		_isGM = (vm->getGameId() != GID_ITE);
 	} else {
-		if (!memcmp(buffer->getBuffer(), "FORM", 4)) {
-			_parser = MidiParser::createParser_XMIDI();
-			// ITE had MT32 mapped instruments
-			_isGM = (vm->getGameId() != GID_ITE);
-		} else {
-			_parser = MidiParser::createParser_SMF();
-			// ITE with standalone MIDI files is General MIDI
-			_isGM = (vm->getGameId() == GID_ITE);
-		}
+		_parser = MidiParser::createParser_SMF();
+		// ITE with standalone MIDI files is General MIDI
+		_isGM = (vm->getGameId() == GID_ITE);
 	}
 
 	if (!_parser->loadMusic(buffer->getBuffer(), buffer->size()))
 		error("Music::play() wrong music resource");
+
+	_parser->setTrack(0);
+	_parser->setMidiDriver(this);
+	_parser->setTimerRate(_driver->getBaseTempo());
+	_parser->property(MidiParser::mpCenterPitchWheelOnUnload, 1);
+	_parser->property(MidiParser::mpSendSustainOffOnNotesOff, 1);
+
+	// Handle music looping
+	_parser->property(MidiParser::mpAutoLoop, loop);
+//	_isLooping = loop;
+
+	_isPlaying = true;
+}
+
+void MusicDriver::playQuickTime(const Common::String &musicName, bool loop) {
+	// IHNM Mac uses QuickTime MIDI
+	_parser = MidiParser::createParser_QT();
+	_isGM = true;
+
+	if (!((MidiParser_QT *)_parser)->loadFromContainerFile(musicName))
+		error("MusicDriver::playQuickTime(): Failed to load file '%s'", musicName.c_str());
 
 	_parser->setTrack(0);
 	_parser->setMidiDriver(this);
@@ -130,7 +178,7 @@ Music::Music(SagaEngine *vm, Audio::Mixer *mixer) : _vm(vm), _mixer(mixer) {
 	if (!_musicContext) {
 		if (_vm->getGameId() == GID_ITE) {
 			_musicContext = _vm->_resource->getContext(GAME_RESOURCEFILE);
-		} else {
+		} else if (_vm->getGameId() == GID_IHNM) {
 			// I've listened to music from both the FM and the GM
 			// file, and I've tentatively reached the conclusion
 			// that they are both General MIDI. My guess is that
@@ -156,8 +204,14 @@ Music::Music(SagaEngine *vm, Audio::Mixer *mixer) : _vm(vm), _mixer(mixer) {
 			// Note that the IHNM demo has only got one music file
 			// (music.rsc). It is assumed that it contains FM music
 			_musicContext = _vm->_resource->getContext(GAME_MUSICFILE_FM);
+		} else if (_vm->getGameId() == GID_DINO || _vm->getGameId() == GID_FTA2) {
+			_musicContext = _vm->_resource->getContext(GAME_SOUNDFILE);
 		}
 	}
+
+	_trackNumber = 0;
+	_targetVolume = 0;
+	_currentVolumePercent = 0;
 
 	_digitalMusic = false;
 }
@@ -173,6 +227,9 @@ void Music::musicVolumeGaugeCallback(void *refCon) {
 }
 
 void Music::musicVolumeGauge() {
+	// CHECKME: This is potentially called from a different thread because it is
+	// called from a timer callback. However, it does not seem to take any
+	// precautions to avoid race conditions.
 	int volume;
 
 	_currentVolumePercent += 10;
@@ -226,7 +283,11 @@ void Music::play(uint32 resourceId, MusicFlags flags) {
 
 	debug(2, "Music::play %d, %d", resourceId, flags);
 
-	if (isPlaying() && _trackNumber == resourceId) {
+	if (isPlaying() && _trackNumber == resourceId)
+		return;
+
+	if (_vm->getFeatures() & GF_ITE_DOS_DEMO) {
+		warning("TODO: Music::play %d, %d for ITE DOS demo", resourceId, flags);
 		return;
 	}
 
@@ -234,19 +295,18 @@ void Music::play(uint32 resourceId, MusicFlags flags) {
 	_mixer->stopHandle(_musicHandle);
 	_player->stop();
 
-	int realTrackNumber;
+	int realTrackNumber = 0;
 
 	if (_vm->getGameId() == GID_ITE) {
-		if (flags == MUSIC_DEFAULT) {
-			if (resourceId == 13 || resourceId == 19) {
-				flags = MUSIC_NORMAL;
-			} else {
-				flags = MUSIC_LOOP;
-			}
-		}
+		if (flags == MUSIC_NORMAL && (resourceId == 13 || resourceId == 19))
+			flags = MUSIC_LOOP;
 		realTrackNumber = resourceId - 8;
-	} else {
+	} else if (_vm->getGameId() == GID_IHNM) {
 		realTrackNumber = resourceId + 1;
+	} else if (_vm->getGameId() == GID_DINO || _vm->getGameId() == GID_FTA2) {
+		realTrackNumber = resourceId + 1;
+		uint32 musicTrackTag = MKTAG('X','M','I', (byte)(resourceId + 1));
+		resourceId = _musicContext->getEntryNum(musicTrackTag);
 	}
 
 	// Try to open standalone digital track
@@ -338,36 +398,21 @@ void Music::play(uint32 resourceId, MusicFlags flags) {
 		return;
 	}
 
-	if (flags == MUSIC_DEFAULT)
-		flags = MUSIC_NORMAL;
-
 	// Load MIDI/XMI resource data
 	if (_vm->getGameId() == GID_IHNM && _vm->isMacResources()) {
 		// Load the external music file for Mac IHNM
-#if 0
-		Common::File musicFile;
-		char musicFileName[40];
-		sprintf(musicFileName, "Music/Music%02x", resourceId);
-		musicFile.open(musicFileName);
-		resourceSize = musicFile.size();
-		resourceData = new byte[resourceSize];
-		musicFile.read(resourceData, resourceSize);
-		musicFile.close();
-
-		// TODO: The Mac music format is unsupported (QuickTime MIDI)
-		// so stop here
-#endif
-		return;
+		_player->playQuickTime(Common::String::format("Music/Music%02x", resourceId), flags & MUSIC_LOOP);
 	} else {
 		if (_currentMusicBuffer == &_musicBuffer[1]) {
 			_currentMusicBuffer = &_musicBuffer[0];
 		} else {
 			_currentMusicBuffer = &_musicBuffer[1];
 		}
+
 		_vm->_resource->loadResource(_musicContext, resourceId, *_currentMusicBuffer);
+		_player->play(_vm, _currentMusicBuffer, (flags & MUSIC_LOOP));
 	}
 
-	_player->play(_vm, _currentMusicBuffer, (flags & MUSIC_LOOP));
 	setVolume(_vm->_musicVolume);
 }
 

@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #ifndef ENGINES_METAENGINE_H
@@ -94,6 +95,9 @@ public:
 
 	/**
 	 * Return a list of all save states associated with the given target.
+	 *
+	 * The returned list is guaranteed to be sorted by slot numbers. That
+	 * means smaller slot numbers are always stored before bigger slot numbers.
 	 *
 	 * The caller has to ensure that this (Meta)Engine is responsible
 	 * for the specified target (by using findGame on it respectively
@@ -232,7 +236,19 @@ public:
 		 * the game till the save.
 		 * This flag may only be set when 'kSavesSupportMetaInfo' is set.
 		 */
-		kSavesSupportPlayTime
+		kSavesSupportPlayTime,
+
+		/**
+		* Feature is available if engine's saves could be detected
+		* with "<target>.###" pattern and "###" corresponds to slot
+		* number.
+		*
+		* If that's not true or engine is using some unusual way
+		* of detecting saves and slot numbers, this should be
+		* unavailable. In that case Save/Load dialog for engine's
+		* games is locked during cloud saves sync.
+		*/
+		kSimpleSavesNames
 	};
 
 	/**

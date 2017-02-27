@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -25,13 +25,22 @@
 
 namespace Sci {
 
+// Following variations existed:
+// up until including 0.530 (Hoyle 1): will always get 2 parameters, even if 2 parameters were not passed
+//                                     it seems if range is 0, it will return the seed.
+// 0.566 (Hero's Quest) to SCI1MID: check for 2 parameters, if not 2 parameters get seed.
+// SCI1LATE+: 2 parameters -> get random number within range
+//            1 parameter -> set seed
+//            any other amount of parameters -> get seed
+//
+// Right now, the weird SCI0 behavior (up until 0.530) for getting parameters and getting the seed is not implemented.
+// We also do not let through more than 2 parameters to kRandom via signatures. In case there is a game doing this,
+// a workaround should be added.
 reg_t kRandom(EngineState *s, int argc, reg_t *argv) {
-	switch (argc) {
-	case 1: // set seed to argv[0]
-		// SCI0/SCI01 just reset the seed to 0 instead of using argv[0] at all
-		return NULL_REG;
+	Common::RandomSource &rng = g_sci->getRNG();
 
-	case 2: { // get random number
+	if (argc == 2) {
+		// get random number
 		// numbers are definitely unsigned, for example lsl5 door code in k rap radio is random
 		//  and 5-digit - we get called kRandom(10000, 65000)
 		//  some codes in sq4 are also random and 5 digit (if i remember correctly)
@@ -54,19 +63,25 @@ reg_t kRandom(EngineState *s, int argc, reg_t *argv) {
 		if (range)
 			range--; // the range value was never returned, our random generator gets 0->range, so fix it
 
-		const int randomNumber = fromNumber + (int)g_sci->getRNG().getRandomNumber(range);
+		const int randomNumber = fromNumber + (int)rng.getRandomNumber(range);
 		return make_reg(0, randomNumber);
 	}
 
-	case 3: // get seed
-		// SCI0/01 did not support this at all
-		// Actually we would have to return the previous seed
-		error("kRandom: scripts asked for previous seed");
-		break;
-
-	default:
-		error("kRandom: unsupported argc");
+	// for other amounts of arguments
+	if (getSciVersion() >= SCI_VERSION_1_LATE) {
+		if (argc == 1) {
+			// 1 single argument is for setting the seed
+			// right now we do not change the Common RNG seed.
+			// It should never be required unless a game reuses the same seed to get the same combination of numbers multiple times.
+			// And in such a case, we would have to add code for such a feature (ScummVM RNG uses a UINT32 seed).
+			warning("kRandom: caller requested to set the RNG seed");
+			return NULL_REG;
+		}
 	}
+
+	// treat anything else as if caller wants the seed
+	warning("kRandom: caller requested to get the RNG seed");
+	return make_reg(0, rng.getSeed());
 }
 
 reg_t kAbs(EngineState *s, int argc, reg_t *argv) {
@@ -77,18 +92,7 @@ reg_t kSqrt(EngineState *s, int argc, reg_t *argv) {
 	return make_reg(0, (int16) sqrt((float) ABS(argv[0].toSint16())));
 }
 
-/**
- * Returns the angle (in degrees) between the two points determined by (x1, y1)
- * and (x2, y2). The angle ranges from 0 to 359 degrees.
- * What this function does is pretty simple but apparently the original is not
- * accurate.
- */
-uint16 kGetAngleWorker(int16 x1, int16 y1, int16 x2, int16 y2) {
-	// SCI1 games (QFG2 and newer) use a simple atan implementation. SCI0 games
-	// use a somewhat less accurate calculation (below).
-	if (getSciVersion() >= SCI_VERSION_1_EGA_ONLY)
-		return (int16)(360 - atan2((double)(x1 - x2), (double)(y1 - y2)) * 57.2958) % 360;
-
+uint16 kGetAngle_SCI0(int16 x1, int16 y1, int16 x2, int16 y2) {
 	int16 xRel = x2 - x1;
 	int16 yRel = y1 - y2; // y-axis is mirrored.
 	int16 angle;
@@ -117,6 +121,75 @@ uint16 kGetAngleWorker(int16 x1, int16 y1, int16 x2, int16 y2) {
 	angle -= (angle + 9) / 10;
 	return angle;
 }
+
+// atan2 for first octant, x >= y >= 0. Returns [0,45] (inclusive)
+int kGetAngle_SCI1_atan2_base(int y, int x) {
+	if (x == 0)
+		return 0;
+
+	// fixed point tan(a)
+	int tan_fp = 10000 * y / x;
+
+	if ( tan_fp >= 1000 ) {
+		// For tan(a) >= 0.1, interpolate between multiples of 5 degrees
+
+		// 10000 * tan([5, 10, 15, 20, 25, 30, 35, 40, 45])
+		const int tan_table[] = { 875, 1763, 2679, 3640, 4663, 5774,
+		                          7002, 8391, 10000 };
+
+		// Look up tan(a) in our table
+		int i = 1;
+		while (tan_fp > tan_table[i]) ++i;
+
+		// The angle a is between 5*i and 5*(i+1). We linearly interpolate.
+		int dist = tan_table[i] - tan_table[i-1];
+		int interp = (5 * (tan_fp - tan_table[i-1]) + dist/2) / dist;
+		return 5*i + interp;
+	} else {
+		// for tan(a) < 0.1, tan(a) is approximately linear in a.
+		// tan'(0) = 1, so in degrees the slope of atan is 180/pi = 57.29...
+		return (57 * y + x/2) / x;
+	}
+}
+
+int kGetAngle_SCI1_atan2(int y, int x) {
+	if (y < 0) {
+		int a = kGetAngle_SCI1_atan2(-y, -x);
+		if (a == 180)
+			return 0;
+		else
+			return 180 + a;
+	}
+	if (x < 0)
+		return 90 + kGetAngle_SCI1_atan2(-x, y);
+	if (y > x)
+		return 90 - kGetAngle_SCI1_atan2_base(x, y);
+	else
+		return kGetAngle_SCI1_atan2_base(y, x);
+
+}
+
+uint16 kGetAngle_SCI1(int16 x1, int16 y1, int16 x2, int16 y2) {
+	// We flip things around to get into the standard atan2 coordinate system
+	return kGetAngle_SCI1_atan2(x2 - x1, y1 - y2);
+
+}
+
+/**
+ * Returns the angle (in degrees) between the two points determined by (x1, y1)
+ * and (x2, y2). The angle ranges from 0 to 359 degrees.
+ * What this function does is pretty simple but apparently the original is not
+ * accurate.
+ */
+
+uint16 kGetAngleWorker(int16 x1, int16 y1, int16 x2, int16 y2) {
+	if (getSciVersion() >= SCI_VERSION_1_EGA_ONLY)
+		return kGetAngle_SCI1(x1, y1, x2, y2);
+	else
+		return kGetAngle_SCI0(x1, y1, x2, y2);
+}
+
+
 
 reg_t kGetAngle(EngineState *s, int argc, reg_t *argv) {
 	// Based on behavior observed with a test program created with

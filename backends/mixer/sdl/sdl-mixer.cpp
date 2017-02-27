@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -30,12 +30,13 @@
 #include "common/config-manager.h"
 #include "common/textconsole.h"
 
-#ifdef GP2X
+#if defined(GP2X)
 #define SAMPLES_PER_SEC 11025
+#elif defined(PLAYSTATION3)
+#define SAMPLES_PER_SEC 48000
 #else
-#define SAMPLES_PER_SEC 22050
+#define SAMPLES_PER_SEC 44100
 #endif
-//#define SAMPLES_PER_SEC 44100
 
 SdlMixerManager::SdlMixerManager()
 	:
@@ -58,6 +59,16 @@ void SdlMixerManager::init() {
 		error("Could not initialize SDL: %s", SDL_GetError());
 	}
 
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	const char *sdlDriverName = SDL_GetCurrentAudioDriver();
+#else
+	const int maxNameLen = 20;
+	char sdlDriverName[maxNameLen];
+	sdlDriverName[0] = '\0';
+	SDL_AudioDriverName(sdlDriverName, maxNameLen);
+#endif
+	debug(1, "Using SDL Audio Driver \"%s\"", sdlDriverName);
+
 	// Get the desired audio specs
 	SDL_AudioSpec desired = getAudioSpec(SAMPLES_PER_SEC);
 
@@ -69,34 +80,49 @@ void SdlMixerManager::init() {
 	if (SDL_OpenAudio(&fmt, &_obtained) != 0) {
 		warning("Could not open audio device: %s", SDL_GetError());
 
+		// The mixer is not marked as ready
 		_mixer = new Audio::MixerImpl(g_system, desired.freq);
-		assert(_mixer);
-		_mixer->setReady(false);
-	} else {
-		debug(1, "Output sample rate: %d Hz", _obtained.freq);
-		if (_obtained.freq != desired.freq)
-			warning("SDL mixer output sample rate: %d differs from desired: %d", _obtained.freq, desired.freq);
+		return;
+	}
 
-		debug(1, "Output buffer size: %d samples", _obtained.samples);
-		if (_obtained.samples != desired.samples)
-			warning("SDL mixer output buffer size: %d differs from desired: %d", _obtained.samples, desired.samples);
+	// The obtained sample format is not supported by the mixer, call
+	// SDL_OpenAudio again with NULL as the second argument to force
+	// SDL to do resampling to the desired audio spec.
+	if (_obtained.format != desired.format) {
+		debug(1, "SDL mixer sound format: %d differs from desired: %d", _obtained.format, desired.format);
+		SDL_CloseAudio();
 
-		if (_obtained.format != desired.format)
-			warning("SDL mixer sound format: %d differs from desired: %d", _obtained.format, desired.format);
+		if (SDL_OpenAudio(&fmt, NULL) != 0) {
+			warning("Could not open audio device: %s", SDL_GetError());
+
+			// The mixer is not marked as ready
+			_mixer = new Audio::MixerImpl(g_system, desired.freq);
+			return;
+		}
+
+		_obtained = desired;
+	}
+
+	debug(1, "Output sample rate: %d Hz", _obtained.freq);
+	if (_obtained.freq != desired.freq)
+		warning("SDL mixer output sample rate: %d differs from desired: %d", _obtained.freq, desired.freq);
+
+	debug(1, "Output buffer size: %d samples", _obtained.samples);
+	if (_obtained.samples != desired.samples)
+		warning("SDL mixer output buffer size: %d differs from desired: %d", _obtained.samples, desired.samples);
 
 #ifndef __SYMBIAN32__
-		// The SymbianSdlMixerManager does stereo->mono downmixing,
-		// but otherwise we require stereo output.
-		if (_obtained.channels != 2)
-			error("SDL mixer output requires stereo output device");
+	// The SymbianSdlMixerManager does stereo->mono downmixing,
+	// but otherwise we require stereo output.
+	if (_obtained.channels != 2)
+		error("SDL mixer output requires stereo output device");
 #endif
 
-		_mixer = new Audio::MixerImpl(g_system, _obtained.freq);
-		assert(_mixer);
-		_mixer->setReady(true);
+	_mixer = new Audio::MixerImpl(g_system, _obtained.freq);
+	assert(_mixer);
+	_mixer->setReady(true);
 
-		startAudio();
-	}
+	startAudio();
 }
 
 SDL_AudioSpec SdlMixerManager::getAudioSpec(uint32 outputRate) {
@@ -153,7 +179,7 @@ void SdlMixerManager::suspendAudio() {
 int SdlMixerManager::resumeAudio() {
 	if (!_audioSuspended)
 		return -2;
-	if (SDL_OpenAudio(&_obtained, NULL) < 0){
+	if (SDL_OpenAudio(&_obtained, NULL) < 0) {
 		return -1;
 	}
 	SDL_PauseAudio(0);

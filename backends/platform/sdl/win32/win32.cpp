@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -35,12 +35,13 @@
 #include "common/error.h"
 #include "common/textconsole.h"
 
-#include <SDL_syswm.h> // For setting the icon
-
+#include "backends/audiocd/win32/win32-audiocd.h"
 #include "backends/platform/sdl/win32/win32.h"
+#include "backends/platform/sdl/win32/win32-window.h"
 #include "backends/saves/windows/windows-saves.h"
 #include "backends/fs/windows/windows-fs-factory.h"
 #include "backends/taskbar/win32/win32-taskbar.h"
+#include "backends/updates/win32/win32-updates.h"
 
 #include "common/memstream.h"
 
@@ -50,9 +51,12 @@ void OSystem_Win32::init() {
 	// Initialize File System Factory
 	_fsFactory = new WindowsFilesystemFactory();
 
+	// Create Win32 specific window
+	_window = new SdlWindow_Win32();
+
 #if defined(USE_TASKBAR)
 	// Initialize taskbar manager
-	_taskbarManager = new Win32TaskbarManager();
+	_taskbarManager = new Win32TaskbarManager(_window);
 #endif
 
 	// Invoke parent implementation of this method
@@ -79,13 +83,18 @@ void OSystem_Win32::initBackend() {
 	if (_savefileManager == 0)
 		_savefileManager = new WindowsSaveFileManager();
 
+#if defined(USE_SPARKLE)
+	// Initialize updates manager
+	_updateManager = new Win32UpdateManager();
+#endif
+
 	// Invoke parent implementation of this method
 	OSystem_SDL::initBackend();
 }
 
 
 bool OSystem_Win32::hasFeature(Feature f) {
-	if (f == kFeatureDisplayLogFile)
+	if (f == kFeatureDisplayLogFile || f == kFeatureOpenUrl)
 		return true;
 
 	return OSystem_SDL::hasFeature(f);
@@ -126,26 +135,14 @@ bool OSystem_Win32::displayLogFile() {
 	return false;
 }
 
-void OSystem_Win32::setupIcon() {
-	HMODULE handle = GetModuleHandle(NULL);
-	HICON   ico    = LoadIcon(handle, MAKEINTRESOURCE(1001 /* IDI_ICON */));
-	if (ico) {
-		SDL_SysWMinfo  wminfo;
-		SDL_VERSION(&wminfo.version);
-		if (SDL_GetWMInfo(&wminfo)) {
-			// Replace the handle to the icon associated with the window class by our custom icon
-			SetClassLongPtr(wminfo.window, GCLP_HICON, (ULONG_PTR)ico);
-
-			// Since there wasn't any default icon, we can't use the return value from SetClassLong
-			// to check for errors (it would be 0 in both cases: error or no previous value for the
-			// icon handle). Instead we check for the last-error code value.
-			if (GetLastError() == ERROR_SUCCESS)
-				return;
-		}
+bool OSystem_Win32::openUrl(const Common::String &url) {
+	const uint64 result = (uint64)ShellExecute(0, 0, /*(wchar_t*)nativeFilePath.utf16()*/url.c_str(), 0, 0, SW_SHOWNORMAL);
+	// ShellExecute returns a value greater than 32 if successful
+	if (result <= 32) {
+		warning("ShellExecute failed: error = %u", result);
+		return false;
 	}
-
-	// If no icon has been set, fallback to default path
-	OSystem_SDL::setupIcon();
+	return true;
 }
 
 Common::String OSystem_Win32::getDefaultConfigFileName() {
@@ -336,6 +333,10 @@ void OSystem_Win32::addSysArchivesToSearchSet(Common::SearchSet &s, int priority
 	s.add("Win32Res", new Win32ResourceArchive(), priority);
 
 	OSystem_SDL::addSysArchivesToSearchSet(s, priority);
+}
+
+AudioCDManager *OSystem_Win32::createAudioCDManager() {
+	return createWin32AudioCDManager();
 }
 
 #endif

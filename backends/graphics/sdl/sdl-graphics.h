@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -23,6 +23,9 @@
 #ifndef BACKENDS_GRAPHICS_SDL_SDLGRAPHICS_H
 #define BACKENDS_GRAPHICS_SDL_SDLGRAPHICS_H
 
+#include "backends/graphics/graphics.h"
+#include "backends/platform/sdl/sdl-window.h"
+
 #include "common/rect.h"
 
 class SdlEventSource;
@@ -31,14 +34,24 @@ class SdlEventSource;
  * Base class for a SDL based graphics manager.
  *
  * It features a few extra a few extra features required by SdlEventSource.
- * FIXME/HACK:
- * Note it does not inherit from GraphicsManager to avoid a diamond inheritance
- * in the current OpenGLSdlGraphicsManager.
  */
-class SdlGraphicsManager {
+class SdlGraphicsManager : virtual public GraphicsManager {
 public:
-	SdlGraphicsManager(SdlEventSource *source);
+	SdlGraphicsManager(SdlEventSource *source, SdlWindow *window);
 	virtual ~SdlGraphicsManager();
+
+	/**
+	 * Makes this graphics manager active. That means it should be ready to
+	 * process inputs now. However, even without being active it should be
+	 * able to query the supported modes and other bits.
+	 */
+	virtual void activateManager();
+
+	/**
+	 * Makes this graphics manager inactive. This should allow another
+	 * graphics manager to become active again.
+	 */
+	virtual void deactivateManager();
 
 	/**
 	 * Notify the graphics manager that the graphics needs to be redrawn, since
@@ -79,8 +92,39 @@ public:
 	 */
 	virtual void notifyMousePos(Common::Point mouse) = 0;
 
+	/**
+	 * A (subset) of the graphic manager's state. This is used when switching
+	 * between different SDL graphic managers on runtime.
+	 */
+	struct State {
+		int screenWidth, screenHeight;
+		bool aspectRatio;
+		bool fullscreen;
+		bool cursorPalette;
+
+#ifdef USE_RGB_COLOR
+		Graphics::PixelFormat pixelFormat;
+#endif
+	};
+
+	/**
+	 * Queries the current state of the graphic manager.
+	 */
+	State getState();
+
+	/**
+	 * Setup a basic state of the graphic manager.
+	 */
+	bool setState(const State &state);
+
+	/**
+	 * Queries the SDL window.
+	 */
+	SdlWindow *getWindow() const { return _window; }
+
 protected:
 	SdlEventSource *_eventSource;
+	SdlWindow *_window;
 };
 
 #endif

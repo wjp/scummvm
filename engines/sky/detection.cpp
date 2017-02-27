@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -119,12 +119,12 @@ GameList SkyMetaEngine::getSupportedGames() const {
 const ExtraGuiOptions SkyMetaEngine::getExtraGuiOptions(const Common::String &target) const {
 	Common::String guiOptions;
 	ExtraGuiOptions options;
-	
+
 	if (target.empty()) {
 		options.push_back(skyExtraGuiOption);
 		return options;
 	}
-	
+
 	if (ConfMan.hasKey("guioptions", target)) {
 		guiOptions = ConfMan.get("guioptions", target);
 		guiOptions = parseGameGUIOptions(guiOptions);
@@ -136,7 +136,7 @@ const ExtraGuiOptions SkyMetaEngine::getExtraGuiOptions(const Common::String &ta
 }
 
 GameDescriptor SkyMetaEngine::findGame(const char *gameid) const {
-	if (0 == scumm_stricmp(gameid, skySetting.gameid))
+	if (0 == scumm_stricmp(gameid, skySetting.gameId))
 		return skySetting;
 	return GameDescriptor();
 }
@@ -175,7 +175,7 @@ GameList SkyMetaEngine::detectGames(const Common::FSList &fslist) const {
 		// Match found, add to list of candidates, then abort inner loop.
 		// The game detector uses US English by default. We want British
 		// English to match the recorded voices better.
-		GameDescriptor dg(skySetting.gameid, skySetting.description, Common::UNK_LANG, Common::kPlatformUnknown);
+		GameDescriptor dg(skySetting.gameId, skySetting.description, Common::UNK_LANG, Common::kPlatformUnknown);
 		const SkyVersion *sv = skyVersions;
 		while (sv->dinnerTableEntries) {
 			if (dinnerTableEntries == sv->dinnerTableEntries &&
@@ -222,8 +222,7 @@ SaveStateList SkyMetaEngine::listSaves(const char *target) const {
 
 	// Find all saves
 	Common::StringArray filenames;
-	filenames = saveFileMan->listSavefiles("SKY-VM.???");
-	sort(filenames.begin(), filenames.end());	// Sort (hopefully ensuring we are sorted numerically..)
+	filenames = saveFileMan->listSavefiles("SKY-VM.###");
 
 	// Slot 0 is the autosave, if it exists.
 	// TODO: Check for the existence of the autosave -- but this require us
@@ -235,16 +234,16 @@ SaveStateList SkyMetaEngine::listSaves(const char *target) const {
 		// Extract the extension
 		Common::String ext = file->c_str() + file->size() - 3;
 		ext.toUppercase();
-		if (Common::isDigit(ext[0]) && Common::isDigit(ext[1]) && Common::isDigit(ext[2])) {
-			int slotNum = atoi(ext.c_str());
-			Common::InSaveFile *in = saveFileMan->openForLoading(*file);
-			if (in) {
-				saveList.push_back(SaveStateDescriptor(slotNum+1, savenames[slotNum]));
-				delete in;
-			}
+		int slotNum = atoi(ext.c_str());
+		Common::InSaveFile *in = saveFileMan->openForLoading(*file);
+		if (in) {
+			saveList.push_back(SaveStateDescriptor(slotNum+1, savenames[slotNum]));
+			delete in;
 		}
 	}
 
+	// Sort saves based on slot number.
+	Common::sort(saveList.begin(), saveList.end(), SaveStateDescriptorSlotComparator());
 	return saveList;
 }
 

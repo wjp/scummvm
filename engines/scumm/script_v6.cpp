@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -394,7 +394,7 @@ ScummEngine_v6::ArrayHeader *ScummEngine_v6::getArray(int array) {
 int ScummEngine_v6::readArray(int array, int idx, int base) {
 	ArrayHeader *ah = getArray(array);
 
-	if (ah == NULL || ah->data == NULL)
+	if (!ah)
 		error("readArray: invalid array %d (%d)", array, readVar(array));
 
 	// WORKAROUND bug #645711. This is clearly a script bug, as this script
@@ -706,6 +706,17 @@ void ScummEngine_v6::o6_ifNot() {
 
 void ScummEngine_v6::o6_jump() {
 	int offset = fetchScriptWordSigned();
+
+	// WORKAROUND bug #6097: Pressing escape at the lake side entrance of
+	// the cave while Putt Putt is not on solid ground and still talking
+	// will cause the raft to disappear. This is a script bug in the
+	// original game and affects several versions.
+	if (_game.id == GID_PUTTZOO) {
+		if (_game.heversion == 73 && vm.slot[_currentScript].number == 206 && offset == 176 && !isScriptRunning(202))
+			_scummVars[244] = 35;
+		if (_game.features & GF_HE_985 && vm.slot[_currentScript].number == 2054 && offset == 178 && !isScriptRunning(2050))
+			_scummVars[202] = 35;
+	}
 
 	// WORKAROUND bug #2826144: Talking to the guard at the bigfoot party, after
 	// he's let you inside, will cause the game to hang, if you end the conversation.
@@ -2510,7 +2521,7 @@ void ScummEngine_v7::o6_kernelSetFunctions() {
 					_disableFadeInEffect = true;
 				}
 			} else if (_game.id == GID_FT && !_skipVideo) {
-				const int insaneVarNum = ((_game.features & GF_DEMO) && (_game.platform == Common::kPlatformPC))
+				const int insaneVarNum = ((_game.features & GF_DEMO) && (_game.platform == Common::kPlatformDOS))
 					? 232 : 233;
 
 				_insane->setSmushParams(_smushFrameRate);
@@ -2597,7 +2608,11 @@ void ScummEngine_v6::o6_kernelSetFunctions() {
 		fadeIn(args[1]);
 		break;
 	case 8:
-		startManiac();
+		if (startManiac()) {
+			// This is so that the surprised exclamation happens
+			// after we return to the game again, not before.
+			o6_breakHere();
+		}
 		break;
 	case 9:
 		killAllScriptsExceptCurrent();

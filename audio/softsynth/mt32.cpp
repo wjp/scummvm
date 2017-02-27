@@ -17,14 +17,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #include "common/scummsys.h"
 #include "common/system.h"
 
 #ifdef USE_MT32EMU
-
-#include "audio/softsynth/mt32/mt32emu.h"
 
 #include "audio/softsynth/emumidi.h"
 #include "audio/musicplugin.h"
@@ -40,12 +39,63 @@
 #include "common/archive.h"
 #include "common/textconsole.h"
 #include "common/translation.h"
+#include "common/osd_message_queue.h"
 
 #include "graphics/fontman.h"
 #include "graphics/surface.h"
 #include "graphics/pixelformat.h"
 #include "graphics/palette.h"
 #include "graphics/font.h"
+
+#include "gui/message.h"
+
+// prevents load of unused FileStream API because it includes a standard library
+// include, per _sev
+#define MT32EMU_FILE_STREAM_H
+
+#include "audio/softsynth/mt32/c_interface/cpp_interface.h"
+
+namespace MT32Emu {
+
+class ScummVMReportHandler : public MT32Emu::IReportHandler {
+public:
+	// Callback for debug messages, in vprintf() format
+	void printDebug(const char *fmt, va_list list) {
+		Common::String out = Common::String::vformat(fmt, list);
+		debug(4, "%s", out.c_str());
+	}
+
+	// Callbacks for reporting various errors and information
+	void onErrorControlROM() {
+		GUI::MessageDialog dialog("MT32Emu: Init Error - Missing or invalid Control ROM image", "OK");
+		dialog.runModal();
+		error("MT32emu: Init Error - Missing or invalid Control ROM image");
+	}
+	void onErrorPCMROM() {
+		GUI::MessageDialog dialog("MT32Emu: Init Error - Missing PCM ROM image", "OK");
+		dialog.runModal();
+		error("MT32emu: Init Error - Missing PCM ROM image");
+	}
+	void showLCDMessage(const char *message) {
+		Common::OSDMessageQueue::instance().addMessage(message);
+	}
+
+	// Unused callbacks
+	virtual void onMIDIMessagePlayed() {}
+	virtual bool onMIDIQueueOverflow() { return false; }
+	virtual void onMIDISystemRealtime(Bit8u /* system_realtime */) {}
+	virtual void onDeviceReset() {}
+	virtual void onDeviceReconfig() {}
+	virtual void onNewReverbMode(Bit8u /* mode */) {}
+	virtual void onNewReverbTime(Bit8u /* time */) {}
+	virtual void onNewReverbLevel(Bit8u /* level */) {}
+	virtual void onPolyStateChanged(Bit8u /* part_num */) {}
+	virtual void onProgramChanged(Bit8u /* part_num */, const char * /* sound_group_name */, const char * /* patch_name */) {}
+
+	virtual ~ScummVMReportHandler() {}
+};
+
+}	// end of namespace MT32Emu
 
 class MidiChannel_MT32 : public MidiChannel_MPU401 {
 	void effectLevel(byte value) { }
@@ -56,7 +106,10 @@ class MidiDriver_MT32 : public MidiDriver_Emulated {
 private:
 	MidiChannel_MT32 _midiChannels[16];
 	uint16 _channelMask;
-	MT32Emu::Synth *_synth;
+	MT32Emu::Service _service;
+	MT32Emu::ScummVMReportHandler _reportHandler;
+	byte *_controlData, *_pcmData;
+	Common::Mutex _mutex;
 
 	int _outputRate;
 
@@ -64,15 +117,13 @@ protected:
 	void generateSamples(int16 *buf, int len);
 
 public:
-	bool _initializing;
-
 	MidiDriver_MT32(Audio::Mixer *mixer);
 	virtual ~MidiDriver_MT32();
 
 	int open();
 	void close();
 	void send(uint32 b);
-	void setPitchBendRange (byte channel, uint range);
+	void setPitchBendRange(byte channel, uint range);
 	void sysEx(const byte *msg, uint16 length);
 
 	uint32 property(int prop, uint32 param);
@@ -83,149 +134,6 @@ public:
 	bool isStereo() const { return true; }
 	int getRate() const { return _outputRate; }
 };
-
-static int eatSystemEvents() {
-	Common::Event event;
-	Common::EventManager *eventMan = g_system->getEventManager();
-	while (eventMan->pollEvent(event)) {
-		switch (event.type) {
-		case Common::EVENT_QUIT:
-			return 1;
-		default:
-			break;
-		}
-	}
-	return 0;
-}
-
-static void drawProgress(float progress) {
-	const Graphics::Font &font(*FontMan.getFontByUsage(Graphics::FontManager::kGUIFont));
-	Graphics::Surface *screen = g_system->lockScreen();
-
-	assert(screen);
-	assert(screen->pixels);
-
-	Graphics::PixelFormat screenFormat = g_system->getScreenFormat();
-
-	int16 w = g_system->getWidth() / 7 * 5;
-	int16 h = font.getFontHeight();
-	int16 x = g_system->getWidth() / 7;
-	int16 y = g_system->getHeight() / 2 - h / 2;
-
-	Common::Rect r(x, y, x + w, y + h);
-
-	uint32 col;
-
-	if (screenFormat.bytesPerPixel > 1)
-		col = screenFormat.RGBToColor(0, 171, 0);
-	else
-		col = 1;
-
-	screen->frameRect(r, col);
-
-	r.grow(-1);
-	r.setWidth(uint16(progress * w));
-
-	if (screenFormat.bytesPerPixel > 1)
-		col = screenFormat.RGBToColor(171, 0, 0);
-	else
-		col = 2;
-
-	screen->fillRect(r, col);
-
-	g_system->unlockScreen();
-	g_system->updateScreen();
-}
-
-static void drawMessage(int offset, const Common::String &text) {
-	const Graphics::Font &font(*FontMan.getFontByUsage(Graphics::FontManager::kGUIFont));
-	Graphics::Surface *screen = g_system->lockScreen();
-
-	assert(screen);
-	assert(screen->pixels);
-
-	Graphics::PixelFormat screenFormat = g_system->getScreenFormat();
-
-	uint16 h = font.getFontHeight();
-	uint16 y = g_system->getHeight() / 2 - h / 2 + offset * (h + 1);
-
-	uint32 col;
-
-	if (screenFormat.bytesPerPixel > 1)
-		col = screenFormat.RGBToColor(0, 0, 0);
-	else
-		col = 0;
-
-	Common::Rect r(0, y, screen->w, y + h);
-	screen->fillRect(r, col);
-
-	if (screenFormat.bytesPerPixel > 1)
-		col = screenFormat.RGBToColor(0, 171, 0);
-	else
-		col = 1;
-
-	font.drawString(screen, text, 0, y, screen->w, col, Graphics::kTextAlignCenter);
-
-	g_system->unlockScreen();
-	g_system->updateScreen();
-}
-
-static Common::File *MT32_OpenFile(void *userData, const char *filename) {
-	Common::File *file = new Common::File();
-	if (!file->open(filename)) {
-		delete file;
-		return NULL;
-	}
-	return file;
-}
-
-static void MT32_PrintDebug(void *userData, const char *fmt, va_list list) {
-	if (((MidiDriver_MT32 *)userData)->_initializing) {
-		char buf[512];
-
-		vsnprintf(buf, 512, fmt, list);
-		buf[70] = 0; // Truncate to a reasonable length
-
-		drawMessage(1, buf);
-	}
-
-	//vdebug(0, fmt, list); // FIXME: Use a higher debug level
-}
-
-static int MT32_Report(void *userData, MT32Emu::ReportType type, const void *reportData) {
-	switch (type) {
-	case MT32Emu::ReportType_lcdMessage:
-		g_system->displayMessageOnOSD((const char *)reportData);
-		break;
-	case MT32Emu::ReportType_errorControlROM:
-		error("Failed to load MT32_CONTROL.ROM");
-		break;
-	case MT32Emu::ReportType_errorPCMROM:
-		error("Failed to load MT32_PCM.ROM");
-		break;
-	case MT32Emu::ReportType_progressInit:
-		if (((MidiDriver_MT32 *)userData)->_initializing) {
-			drawProgress(*((const float *)reportData));
-			return eatSystemEvents();
-		}
-		break;
-	case MT32Emu::ReportType_availableSSE:
-		debug(1, "MT32emu: SSE is available");
-		break;
-	case MT32Emu::ReportType_usingSSE:
-		debug(1, "MT32emu: using SSE");
-		break;
-	case MT32Emu::ReportType_available3DNow:
-		debug(1, "MT32emu: 3DNow! is available");
-		break;
-	case MT32Emu::ReportType_using3DNow:
-		debug(1, "MT32emu: using 3DNow!");
-		break;
-	default:
-		break;
-	}
-	return 0;
-}
 
 ////////////////////////////////////////
 //
@@ -239,43 +147,18 @@ MidiDriver_MT32::MidiDriver_MT32(Audio::Mixer *mixer) : MidiDriver_Emulated(mixe
 	for (i = 0; i < ARRAYSIZE(_midiChannels); ++i) {
 		_midiChannels[i].init(this, i);
 	}
-	_synth = NULL;
-	// A higher baseFreq reduces the length used in generateSamples(),
-	// and means that the timer callback will be called more often.
-	// That results in more accurate timing.
-	_baseFreq = 10000;
-	// Unfortunately bugs in the emulator cause inaccurate tuning
-	// at rates other than 32KHz, thus we produce data at 32KHz and
-	// rely on Mixer to convert.
-	_outputRate = 32000; //_mixer->getOutputRate();
-	_initializing = false;
+	_outputRate = 0;
+	_controlData = nullptr;
+	_pcmData = nullptr;
 }
 
 MidiDriver_MT32::~MidiDriver_MT32() {
-	delete _synth;
+	close();
 }
 
 int MidiDriver_MT32::open() {
-	MT32Emu::SynthProperties prop;
-
 	if (_isOpen)
 		return MERR_ALREADY_OPEN;
-
-	MidiDriver_Emulated::open();
-
-	memset(&prop, 0, sizeof(prop));
-	prop.sampleRate = getRate();
-	prop.useReverb = true;
-	prop.useDefaultReverb = false;
-	prop.reverbType = 0;
-	prop.reverbTime = 5;
-	prop.reverbLevel = 3;
-	prop.userData = this;
-	prop.printDebug = MT32_PrintDebug;
-	prop.report = MT32_Report;
-	prop.openFile = MT32_OpenFile;
-
-	_synth = new MT32Emu::Synth();
 
 	Graphics::PixelFormat screenFormat = g_system->getScreenFormat();
 
@@ -289,55 +172,92 @@ int MidiDriver_MT32::open() {
 		g_system->getPaletteManager()->setPalette(dummy_palette, 0, 3);
 	}
 
-	_initializing = true;
-	drawMessage(-1, _s("Initializing MT-32 Emulator"));
-	if (!_synth->open(prop))
+	debug(4, _s("Initializing MT-32 Emulator"));
+
+	Common::File controlFile;
+	if (!controlFile.open("CM32L_CONTROL.ROM") && !controlFile.open("MT32_CONTROL.ROM"))
+		error("Error opening MT32_CONTROL.ROM / CM32L_CONTROL.ROM. Check that your Extra Path in Paths settings is set to the correct directory");
+
+	Common::File pcmFile;
+	if (!pcmFile.open("CM32L_PCM.ROM") && !pcmFile.open("MT32_PCM.ROM"))
+		error("Error opening MT32_PCM.ROM / CM32L_PCM.ROM. Check that your Extra Path in Paths settings is set to the correct directory");
+
+	_controlData = new byte[controlFile.size()];
+	controlFile.read(_controlData, controlFile.size());
+	_pcmData = new byte[pcmFile.size()];
+	pcmFile.read(_pcmData, pcmFile.size());
+
+	_service.createContext(_reportHandler);
+
+	if (_service.addROMData(_controlData, controlFile.size()) != MT32EMU_RC_ADDED_CONTROL_ROM) {
+		error("Adding control ROM failed. Check that your control ROM is valid");
+	}
+
+	controlFile.close();
+
+	if (_service.addROMData(_pcmData, pcmFile.size()) != MT32EMU_RC_ADDED_PCM_ROM) {
+		error("Adding PCM ROM failed. Check that your PCM ROM is valid");
+	}
+
+	pcmFile.close();
+
+	if (_service.openSynth() != MT32EMU_RC_OK)
 		return MERR_DEVICE_NOT_AVAILABLE;
 
 	double gain = (double)ConfMan.getInt("midi_gain") / 100.0;
-	_synth->setOutputGain(1.0f * gain);
-	_synth->setReverbOutputGain(0.68f * gain);
+	_service.setOutputGain(1.0f * gain);
+	_service.setReverbOutputGain(1.0f * gain);
+	// We let the synthesizer play MIDI messages immediately. Our MIDI
+	// handling is synchronous to sample generation. This makes delaying MIDI
+	// events result in odd sound output in some cases. For example, the
+	// shattering window in the Indiana Jones and the Fate of Atlantis intro
+	// will sound like a bell if we use any delay here.
+	// Bug #6242 "AUDIO: Built-In MT-32 MUNT Produces Wrong Sounds".
+	_service.setMIDIDelayMode(MT32Emu::MIDIDelayMode_IMMEDIATE);
 
-	_initializing = false;
+	// We need to report the sample rate MUNT renders at as sample rate of our
+	// AudioStream.
+	_outputRate = _service.getActualStereoOutputSamplerate();
 
-	if (screenFormat.bytesPerPixel > 1)
-		g_system->fillScreen(screenFormat.RGBToColor(0, 0, 0));
-	else
-		g_system->fillScreen(0);
+	MidiDriver_Emulated::open();
 
-	g_system->updateScreen();
-
-	_mixer->playStream(Audio::Mixer::kSFXSoundType, &_mixerSoundHandle, this, -1, Audio::Mixer::kMaxChannelVolume, 0, DisposeAfterUse::NO, true);
+	_mixer->playStream(Audio::Mixer::kPlainSoundType, &_mixerSoundHandle, this, -1, Audio::Mixer::kMaxChannelVolume, 0, DisposeAfterUse::NO, true);
 
 	return 0;
 }
 
 void MidiDriver_MT32::send(uint32 b) {
-	_synth->playMsg(b);
+	Common::StackLock lock(_mutex);
+	_service.playMsg(b);
 }
 
+// Indiana Jones and the Fate of Atlantis (including the demo) uses
+// setPitchBendRange, if you need a game for testing purposes
 void MidiDriver_MT32::setPitchBendRange(byte channel, uint range) {
 	if (range > 24) {
 		warning("setPitchBendRange() called with range > 24: %d", range);
 	}
-	byte benderRangeSysex[9];
-	benderRangeSysex[0] = 0x41; // Roland
-	benderRangeSysex[1] = channel;
-	benderRangeSysex[2] = 0x16; // MT-32
-	benderRangeSysex[3] = 0x12; // Write
-	benderRangeSysex[4] = 0x00;
-	benderRangeSysex[5] = 0x00;
-	benderRangeSysex[6] = 0x04;
-	benderRangeSysex[7] = (byte)range;
-	benderRangeSysex[8] = MT32Emu::Synth::calcSysexChecksum(&benderRangeSysex[4], 4, 0);
-	sysEx(benderRangeSysex, 9);
+	byte benderRangeSysex[4] = { 0, 0, 4, (uint8)range };
+	Common::StackLock lock(_mutex);
+	_service.writeSysex(channel, benderRangeSysex, 4);
 }
 
 void MidiDriver_MT32::sysEx(const byte *msg, uint16 length) {
 	if (msg[0] == 0xf0) {
-		_synth->playSysex(msg, length);
+		Common::StackLock lock(_mutex);
+		_service.playSysex(msg, length);
 	} else {
-		_synth->playSysexWithoutFraming(msg, length);
+		enum {
+			SYSEX_CMD_DT1 = 0x12,
+			SYSEX_CMD_DAT = 0x42
+		};
+
+		if (msg[3] == SYSEX_CMD_DT1 || msg[3] == SYSEX_CMD_DAT) {
+			Common::StackLock lock(_mutex);
+			_service.writeSysex(msg[1], msg + 4, length - 5);
+		} else {
+			warning("Unused sysEx command %d", msg[3]);
+		}
 	}
 }
 
@@ -351,13 +271,18 @@ void MidiDriver_MT32::close() {
 	// Detach the mixer callback handler
 	_mixer->stopHandle(_mixerSoundHandle);
 
-	_synth->close();
-	delete _synth;
-	_synth = NULL;
+	Common::StackLock lock(_mutex);
+	_service.closeSynth();
+	_service.freeContext();
+	delete[] _controlData;
+	_controlData = nullptr;
+	delete[] _pcmData;
+	_pcmData = nullptr;
 }
 
 void MidiDriver_MT32::generateSamples(int16 *data, int len) {
-	_synth->render(data, len);
+	Common::StackLock lock(_mutex);
+	_service.renderBit16s(data, len);
 }
 
 uint32 MidiDriver_MT32::property(int prop, uint32 param) {
@@ -538,9 +463,6 @@ bool MT32EmuMusicPlugin::checkDevice(MidiDriver::DeviceHandle) const {
 }
 
 Common::Error MT32EmuMusicPlugin::createInstance(MidiDriver **mididriver, MidiDriver::DeviceHandle) const {
-	if (ConfMan.hasKey("extrapath"))
-		SearchMan.addDirectory("extrapath", ConfMan.get("extrapath"));
-
 	*mididriver = new MidiDriver_MT32(g_system->getMixer());
 
 	return Common::kNoError;

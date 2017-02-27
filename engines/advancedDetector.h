@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -81,19 +81,21 @@ typedef Common::HashMap<Common::String, ADFileProperties, Common::IgnoreCase_Has
 
 enum ADGameFlags {
 	ADGF_NO_FLAGS = 0,
+	ADGF_AUTOGENTARGET = (1 << 20),  // automatically generate gameid from extra
 	ADGF_UNSTABLE = (1 << 21),    	// flag to designate not yet officially-supported games that are not fit for public testing
 	ADGF_TESTING = (1 << 22),    	// flag to designate not yet officially-supported games that are fit for public testing
 	ADGF_PIRATED = (1 << 23), ///< flag to designate well known pirated versions with cracks
 	ADGF_ADDENGLISH = (1 << 24), ///< always add English as language option
 	ADGF_MACRESFORK = (1 << 25), ///< the md5 for this entry will be calculated from the resource fork
 	ADGF_USEEXTRAASTITLE = (1 << 26), ///< Extra field value will be used as main game title, not gameid
-	ADGF_DROPLANGUAGE = (1 << 28), ///< don't add language to gameid
+	ADGF_DROPLANGUAGE = (1 << 27), ///< don't add language to gameid
+	ADGF_DROPPLATFORM = (1 << 28), ///< don't add platform to gameid
 	ADGF_CD = (1 << 29),    	///< add "-cd" to gameid
 	ADGF_DEMO = (1 << 30)   	///< add "-demo" to gameid
 };
 
 struct ADGameDescription {
-	const char *gameid;
+	const char *gameId;
 	const char *extra;
 	ADGameFileDescription filesDescriptions[14];
 	Common::Language language;
@@ -106,7 +108,7 @@ struct ADGameDescription {
 	 */
 	uint32 flags;
 
-	const char *guioptions;
+	const char *guiOptions;
 };
 
 /**
@@ -190,11 +192,11 @@ protected:
 	 * A list of all gameids (and their corresponding descriptions) supported
 	 * by this engine.
 	 */
-	const PlainGameDescriptor *_gameids;
+	const PlainGameDescriptor *_gameIds;
 
 	/**
 	 * A map containing all the extra game GUI options the engine supports.
-	 */ 
+	 */
 	const ADExtraGuiOptionsMap * const _extraGuiOptions;
 
 	/**
@@ -212,13 +214,13 @@ protected:
 	 *
 	 * Used to override gameid.
 	 * This is a recommended setting to prevent global gameid pollution.
-	 * With this option set, the gameid effectively turns into engineid. 
+	 * With this option set, the gameid effectively turns into engineid.
 	 *
 	 * FIXME: This field actually removes a feature (gameid) in order to
 	 * address a more generic problem. We should find a better way to
 	 * disambiguate gameids.
 	 */
-	const char *_singleid;
+	const char *_singleId;
 
 	/**
 	 * A bitmask of flags which can be used to configure the behavior
@@ -232,7 +234,7 @@ protected:
 	 * entry in addition to per-game options. Refer to GameGUIOption
 	 * enum for the list.
 	 */
-	Common::String _guioptions;
+	Common::String _guiOptions;
 
 	/**
 	 * Maximum depth of directories to look up.
@@ -250,7 +252,7 @@ protected:
 	const char * const *_directoryGlobs;
 
 public:
-	AdvancedMetaEngine(const void *descs, uint descItemSize, const PlainGameDescriptor *gameids, const ADExtraGuiOptionsMap *extraGuiOptions = 0);
+	AdvancedMetaEngine(const void *descs, uint descItemSize, const PlainGameDescriptor *gameIds, const ADExtraGuiOptionsMap *extraGuiOptions = 0);
 
 	/**
 	 * Returns list of targets supported by the engine.
@@ -258,7 +260,7 @@ public:
 	 */
 	virtual GameList getSupportedGames() const;
 
-	virtual GameDescriptor findGame(const char *gameid) const;
+	virtual GameDescriptor findGame(const char *gameId) const;
 
 	virtual GameList detectGames(const Common::FSList &fslist) const;
 
@@ -279,6 +281,9 @@ protected:
 	virtual const ADGameDescription *fallbackDetect(const FileMap &allFiles, const Common::FSList &fslist) const {
 		return 0;
 	}
+
+private:
+	void initSubSystems(const ADGameDescription *gameDesc) const;
 
 protected:
 	/**

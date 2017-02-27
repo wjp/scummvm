@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -72,6 +72,8 @@ bool StaticBitmap::initBitmapResource(const Common::String &filename) {
 	_originalWidth = _width = bitmapPtr->getWidth();
 	_originalHeight = _height = bitmapPtr->getHeight();
 
+	_isSolid = bitmapPtr->isSolid();
+
 	// Bild-Resource freigeben
 	bitmapPtr->release();
 
@@ -81,7 +83,7 @@ bool StaticBitmap::initBitmapResource(const Common::String &filename) {
 StaticBitmap::~StaticBitmap() {
 }
 
-bool StaticBitmap::doRender() {
+bool StaticBitmap::doRender(RectangleList *updateRects) {
 	// Bitmap holen
 	Resource *resourcePtr = Kernel::getInstance()->getResourceManager()->requestResource(_resourceFilename);
 	assert(resourcePtr);
@@ -96,14 +98,16 @@ bool StaticBitmap::doRender() {
 	bool result;
 	if (_scaleFactorX == 1.0f && _scaleFactorY == 1.0f) {
 		result = bitmapResourcePtr->blit(_absoluteX, _absoluteY,
-		                                 (_flipV ? BitmapResource::FLIP_V : 0) |
-		                                 (_flipH ? BitmapResource::FLIP_H : 0),
-		                                 0, _modulationColor, -1, -1);
+		                                 (_flipV ? Graphics::FLIP_V : 0) |
+		                                 (_flipH ? Graphics::FLIP_H : 0),
+		                                 0, _modulationColor, -1, -1,
+										 updateRects);
 	} else {
 		result = bitmapResourcePtr->blit(_absoluteX, _absoluteY,
-		                                 (_flipV ? BitmapResource::FLIP_V : 0) |
-		                                 (_flipH ? BitmapResource::FLIP_H : 0),
-		                                 0, _modulationColor, _width, _height);
+		                                 (_flipV ? Graphics::FLIP_V : 0) |
+		                                 (_flipH ? Graphics::FLIP_H : 0),
+		                                 0, _modulationColor, _width, _height,
+										 updateRects);
 	}
 
 	// Resource freigeben
@@ -120,6 +124,10 @@ uint StaticBitmap::getPixel(int x, int y) const {
 	assert(pResource->getType() == Resource::TYPE_BITMAP);
 	BitmapResource *pBitmapResource = static_cast<BitmapResource *>(pResource);
 	uint result = pBitmapResource->getPixel(x, y);
+	// Convert to LUA-ready format
+	byte a;
+	a = result & 0xff;
+	result = (result >> 8) | (a << 24);
 	pResource->release();
 	return result;
 }

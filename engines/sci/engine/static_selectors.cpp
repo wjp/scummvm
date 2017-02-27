@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -114,16 +114,16 @@ static const SelectorRemap sciSelectorRemap[] = {
 	{        SCI_VERSION_1_1,        SCI_VERSION_1_1, "cantBeHere",   54 },
 	// The following are not really needed. They've only been defined to
 	// ease game debugging.
-	{        SCI_VERSION_1_1,        SCI_VERSION_2_1,    "-objID-", 4096 },
-	{        SCI_VERSION_1_1,        SCI_VERSION_2_1,     "-size-", 4097 },
-	{        SCI_VERSION_1_1,        SCI_VERSION_2_1, "-propDict-", 4098 },
-	{        SCI_VERSION_1_1,        SCI_VERSION_2_1, "-methDict-", 4099 },
-	{        SCI_VERSION_1_1,        SCI_VERSION_2_1, "-classScript-", 4100 },
-	{        SCI_VERSION_1_1,        SCI_VERSION_2_1,   "-script-", 4101 },
-	{        SCI_VERSION_1_1,        SCI_VERSION_2_1,    "-super-", 4102 },
+	{        SCI_VERSION_1_1,        SCI_VERSION_2_1_LATE,    "-objID-", 4096 },
+	{        SCI_VERSION_1_1,        SCI_VERSION_2_1_LATE,     "-size-", 4097 },
+	{        SCI_VERSION_1_1,        SCI_VERSION_2_1_LATE, "-propDict-", 4098 },
+	{        SCI_VERSION_1_1,        SCI_VERSION_2_1_LATE, "-methDict-", 4099 },
+	{        SCI_VERSION_1_1,        SCI_VERSION_2_1_LATE, "-classScript-", 4100 },
+	{        SCI_VERSION_1_1,        SCI_VERSION_2_1_LATE,   "-script-", 4101 },
+	{        SCI_VERSION_1_1,        SCI_VERSION_2_1_LATE,    "-super-", 4102 },
 	//
-	{        SCI_VERSION_1_1,        SCI_VERSION_2_1,     "-info-", 4103 },
-	{ SCI_VERSION_NONE,             SCI_VERSION_NONE,            0,    0 }
+	{        SCI_VERSION_1_1,        SCI_VERSION_2_1_LATE,     "-info-", 4103 },
+	{        SCI_VERSION_NONE,           SCI_VERSION_NONE,            0,    0 }
 };
 
 struct ClassReference {

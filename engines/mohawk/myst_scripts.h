@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -34,7 +34,7 @@ namespace Mohawk {
 #define DECLARE_OPCODE(x) void x(uint16 op, uint16 var, uint16 argc, uint16 *argv)
 
 class MohawkEngine_Myst;
-class MystResource;
+class MystArea;
 
 enum MystScriptType {
 	kMystScriptNone,
@@ -63,11 +63,11 @@ public:
 	MystScriptParser(MohawkEngine_Myst *vm);
 	virtual ~MystScriptParser();
 
-	void runScript(MystScript script, MystResource *invokingResource = NULL);
-	void runOpcode(uint16 op, uint16 var = 0, uint16 argc = 0, uint16 *argv = NULL);
+	void runScript(MystScript script, MystArea *invokingResource = nullptr);
+	void runOpcode(uint16 op, uint16 var = 0, uint16 argc = 0, uint16 *argv = nullptr);
 	const Common::String getOpcodeDesc(uint16 op);
 	MystScript readScript(Common::SeekableReadStream *stream, MystScriptType type);
-	void setInvokingResource(MystResource *resource) { _invokingResource = resource; }
+	void setInvokingResource(MystArea *resource) { _invokingResource = resource; }
 
 	virtual void disablePersistentScripts() = 0;
 	virtual void runPersistentScripts() = 0;
@@ -86,10 +86,16 @@ public:
 	// Common opcodes
 	DECLARE_OPCODE(o_toggleVar);
 	DECLARE_OPCODE(o_setVar);
-	DECLARE_OPCODE(o_changeCardSwitch);
+	DECLARE_OPCODE(o_changeCardSwitch4);
+	DECLARE_OPCODE(o_changeCardSwitchLtR);
+	DECLARE_OPCODE(o_changeCardSwitchRtL);
 	DECLARE_OPCODE(o_takePage);
 	DECLARE_OPCODE(o_redrawCard);
 	DECLARE_OPCODE(o_goToDest);
+	DECLARE_OPCODE(o_goToDestForward);
+	DECLARE_OPCODE(o_goToDestLeft);
+	DECLARE_OPCODE(o_goToDestRight);
+	DECLARE_OPCODE(o_goToDestUp);
 	DECLARE_OPCODE(o_triggerMovie);
 	DECLARE_OPCODE(o_toggleVarNoRedraw);
 	DECLARE_OPCODE(o_drawAreaState);
@@ -145,8 +151,6 @@ protected:
 
 	Common::Array<MystOpcode *> _opcodes;
 
-	MystResource *_invokingResource;
-
 	uint16 _savedCardId;
 	uint16 _savedMapCardId;
 	uint16 _savedCursorId;
@@ -157,8 +161,24 @@ protected:
 	static const uint16 _startCard[];
 
 	void setupCommonOpcodes();
-	void varUnusedCheck(uint16 op, uint16 var);
+
+	template<class T>
+	T *getInvokingResource() const;
+
+private:
+	MystArea *_invokingResource;
 };
+
+template<class T>
+T *MystScriptParser::getInvokingResource() const {
+	T *resource = dynamic_cast<T *>(_invokingResource);
+
+	if (!resource) {
+		error("Invoking resource has unexpected type");
+	}
+
+	return resource;
+}
 
 } // End of namespace Mohawk
 

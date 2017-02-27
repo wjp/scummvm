@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -102,14 +102,8 @@ reg_t kLock(EngineState *s, int argc, reg_t *argv) {
 }
 
 reg_t kResCheck(EngineState *s, int argc, reg_t *argv) {
-	Resource *res = NULL;
+	Resource *res = nullptr;
 	ResourceType restype = g_sci->getResMan()->convertResType(argv[0].toUint16());
-
-	if (restype == kResourceTypeVMD) {
-		char fileName[10];
-		sprintf(fileName, "%d.vmd", argv[1].toUint16());
-		return make_reg(0, Common::File::exists(fileName));
-	}
 
 	if ((restype == kResourceTypeAudio36) || (restype == kResourceTypeSync36)) {
 		if (argc >= 6) {
@@ -124,7 +118,16 @@ reg_t kResCheck(EngineState *s, int argc, reg_t *argv) {
 		res = g_sci->getResMan()->testResource(ResourceId(restype, argv[1].toUint16()));
 	}
 
-	return make_reg(0, res != NULL);
+#ifdef ENABLE_SCI32
+	// GK2 stores some VMDs inside of resource volumes, but usually they are
+	// streamed from the filesystem
+	if (res == nullptr && restype == kResourceTypeVMD) {
+		const Common::String fileName = Common::String::format("%u.vmd", argv[1].toUint16());
+		return make_reg(0, Common::File::exists(fileName));
+	}
+#endif
+
+	return make_reg(0, res != nullptr);
 }
 
 reg_t kClone(EngineState *s, int argc, reg_t *argv) {
@@ -229,7 +232,7 @@ reg_t kScriptID(EngineState *s, int argc, reg_t *argv) {
 	uint16 address = scr->validateExportFunc(index, true);
 
 	// Point to the heap for SCI1.1 - SCI2.1 games
-	if (getSciVersion() >= SCI_VERSION_1_1 && getSciVersion() <= SCI_VERSION_2_1)
+	if (getSciVersion() >= SCI_VERSION_1_1 && getSciVersion() <= SCI_VERSION_2_1_LATE)
 		address += scr->getScriptSize();
 
 	// Bugfix for the intro speed in PQ2 version 1.002.011.
@@ -238,8 +241,8 @@ reg_t kScriptID(EngineState *s, int argc, reg_t *argv) {
 	// initialized to 0, whereas it's 6 in other versions. Thus, we assign it
 	// to 6 here, fixing the speed of the introduction. Refer to bug #3102071.
 	if (g_sci->getGameId() == GID_PQ2 && script == 200 &&
-		s->variables[VAR_GLOBAL][3].isNull()) {
-		s->variables[VAR_GLOBAL][3] = make_reg(0, 6);
+		s->variables[VAR_GLOBAL][kGlobalVarSpeed].isNull()) {
+		s->variables[VAR_GLOBAL][kGlobalVarSpeed] = make_reg(0, 6);
 	}
 
 	return make_reg(scriptSeg, address);
@@ -260,9 +263,6 @@ reg_t kDisposeScript(EngineState *s, int argc, reg_t *argv) {
 	if (argc != 2) {
 		return s->r_acc;
 	} else {
-		// This exists in the KQ5CD and GK1 interpreter. We know it is used
-		// when GK1 starts up, before the Sierra logo.
-		warning("kDisposeScript called with 2 parameters, still untested");
 		return argv[1];
 	}
 }

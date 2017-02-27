@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #ifndef BACKENDS_ABSTRACT_FS_H
@@ -83,6 +84,20 @@ protected:
 
 public:
 	/**
+	 * Construct a FSNode object from an AbstractFSNode object.
+	 *
+	 * This is a helper to create Common::FSNode objects when the backend's
+	 * FileSystemFactory cannot create the given AbstractFSNode object itself.
+	 * All other code is supposed to use Common::FSNode's constructor itself.
+	 *
+	 * @param realNode Pointer to a heap allocated instance. FSNode will take
+	 *                 ownership of the pointer.
+	 */
+	static Common::FSNode makeFSNode(AbstractFSNode *realNode) {
+		return Common::FSNode(realNode);
+	}
+
+	/**
 	 * Destructor.
 	 */
 	virtual ~AbstractFSNode() {}
@@ -100,7 +115,7 @@ public:
 	 * @param mode Mode to use while listing the directory.
 	 * @param hidden Whether to include hidden files or not in the results.
 	 *
-	 * @return true if succesful, false otherwise (e.g. when the directory does not exist).
+	 * @return true if successful, false otherwise (e.g. when the directory does not exist).
 	 */
 	virtual bool getChildren(AbstractFSList &list, ListMode mode, bool hidden) const = 0;
 
@@ -176,6 +191,15 @@ public:
 	 * @return pointer to the stream object, 0 in case of a failure
 	 */
 	virtual Common::WriteStream *createWriteStream() = 0;
+
+	/**
+	* Creates a file referred by this node.
+	*
+	* @param isDirectoryFlag true if created file must be a directory
+	*
+	* @return true if file is created successfully
+	*/
+	virtual bool create(bool isDirectoryFlag) = 0;
 };
 
 

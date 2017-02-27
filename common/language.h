@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #ifndef COMMON_LANGUAGE_H
@@ -34,20 +35,22 @@ class String;
 enum Language {
 	ZH_CNA,
 	ZH_TWN,
+	HR_HRV,
 	CZ_CZE,
 	NL_NLD,
 	EN_ANY,     // Generic English (when only one game version exist)
 	EN_GRB,
 	EN_USA,
+	ET_EST,
 	FR_FRA,
 	DE_DEU,
 	GR_GRE,
 	HE_ISR,
-	HR_HRV,
 	HU_HUN,
 	IT_ITA,
 	JA_JPN,
 	KO_KOR,
+	LV_LAT,
 	NB_NOR,
 	PL_POL,
 	PT_BRA,
@@ -81,6 +84,6 @@ const String getGameGUIOptionsDescriptionLanguage(Common::Language lang);
 // TODO: Document this GUIO related function
 bool checkGameGUIOptionLanguage(Common::Language lang, const String &str);
 
-}	// End of namespace Common
+} // End of namespace Common
 
 #endif

@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -42,12 +42,16 @@
 #include "common/debug.h"
 #include "common/debug-channels.h" /* for debug manager */
 #include "common/events.h"
-#include "common/EventRecorder.h"
+#include "gui/EventRecorder.h"
 #include "common/fs.h"
+#ifdef ENABLE_EVENTRECORDER
+#include "common/recorderfile.h"
+#endif
 #include "common/system.h"
 #include "common/textconsole.h"
 #include "common/tokenizer.h"
 #include "common/translation.h"
+#include "common/osd_message_queue.h"
 
 #include "gui/gui-manager.h"
 #include "gui/error.h"
@@ -63,6 +67,15 @@
 #endif
 
 #include "backends/keymapper/keymapper.h"
+#ifdef USE_CLOUD
+#ifdef USE_LIBCURL
+#include "backends/cloud/cloudmanager.h"
+#include "backends/networking/curl/connectionmanager.h"
+#endif
+#ifdef USE_SDL_NET
+#include "backends/networking/sdl_net/localwebserver.h"
+#endif
+#endif
 
 #if defined(_WIN32_WCE)
 #include "backends/platform/wince/CELauncherDialog.h"
@@ -72,6 +85,9 @@
 #include "gui/launcher.h"
 #endif
 
+#ifdef USE_UPDATES
+#include "gui/updates-dialog.h"
+#endif
 
 static bool launcherDialog() {
 
@@ -131,13 +147,38 @@ static Common::Error runGame(const EnginePlugin *plugin, OSystem &system, const 
 	Common::Error err = Common::kNoError;
 	Engine *engine = 0;
 
+#if defined(SDL_BACKEND) && defined(USE_OPENGL) && defined(USE_RGB_COLOR)
+	// HACK: We set up the requested graphics mode setting here to allow the
+	// backend to switch from Surface SDL to OpenGL if necessary. This is
+	// needed because otherwise the g_system->getSupportedFormats might return
+	// bad values.
+	g_system->beginGFXTransaction();
+		g_system->setGraphicsMode(ConfMan.get("gfx_mode").c_str());
+	if (g_system->endGFXTransaction() != OSystem::kTransactionSuccess) {
+		warning("Switching graphics mode to '%s' failed", ConfMan.get("gfx_mode").c_str());
+		return Common::kUnknownError;
+	}
+#endif
+
 	// Verify that the game path refers to an actual directory
-	if (!(dir.exists() && dir.isDirectory()))
+        if (!dir.exists()) {
+		err = Common::kPathDoesNotExist;
+        } else if (!dir.isDirectory()) {
 		err = Common::kPathNotDirectory;
+        }
 
 	// Create the game engine
-	if (err.getCode() == Common::kNoError)
+	if (err.getCode() == Common::kNoError) {
+		// Set default values for all of the custom engine options
+		// Appareantly some engines query them in their constructor, thus we
+		// need to set this up before instance creation.
+		const ExtraGuiOptions engineOptions = (*plugin)->getExtraGuiOptions(Common::String());
+		for (uint i = 0; i < engineOptions.size(); i++) {
+			ConfMan.registerDefault(engineOptions[i].configOption, engineOptions[i].defaultState);
+		}
+
 		err = (*plugin)->createInstance(&system, &engine);
+	}
 
 	// Check for errors
 	if (!engine || err.getCode() != Common::kNoError) {
@@ -181,7 +222,7 @@ static Common::Error runGame(const EnginePlugin *plugin, OSystem &system, const 
 	//
 
 	// Add the game path to the directory search list
-	SearchMan.addDirectory(dir.getPath(), dir, 0, 4);
+	engine->initializePath(dir);
 
 	// Add extrapath (if any) to the directory search list
 	if (ConfMan.hasKey("extrapath")) {
@@ -206,18 +247,14 @@ static Common::Error runGame(const EnginePlugin *plugin, OSystem &system, const 
 	Common::StringTokenizer tokenizer(edebuglevels, " ,");
 	while (!tokenizer.empty()) {
 		Common::String token = tokenizer.nextToken();
-		if (!DebugMan.enableDebugChannel(token))
+		if (token.equalsIgnoreCase("all"))
+			DebugMan.enableAllDebugChannels();
+		else if (!DebugMan.enableDebugChannel(token))
 			warning(_("Engine does not support debug level '%s'"), token.c_str());
 	}
 
 	// Initialize any game-specific keymaps
 	engine->initKeymap();
-
-	// Set default values for all of the custom engine options
-	const ExtraGuiOptions engineOptions = (*plugin)->getExtraGuiOptions(Common::String());
-	for (uint i = 0; i < engineOptions.size(); i++) {
-		ConfMan.registerDefault(engineOptions[i].configOption, engineOptions[i].defaultState);
-	}
 
 	// Inform backend that the engine is about to be run
 	system.engineInit();
@@ -256,6 +293,8 @@ static void setupGraphics(OSystem &system) {
 			system.setFeatureState(OSystem::kFeatureAspectRatioCorrection, ConfMan.getBool("aspect_ratio"));
 		if (ConfMan.hasKey("fullscreen"))
 			system.setFeatureState(OSystem::kFeatureFullscreenMode, ConfMan.getBool("fullscreen"));
+		if (ConfMan.hasKey("filtering"))
+			system.setFeatureState(OSystem::kFeatureFilteringMode, ConfMan.getBool("filtering"));
 	system.endGFXTransaction();
 
 	// When starting up launcher for the first time, the user might have specified
@@ -305,7 +344,7 @@ static void setupKeymapper(OSystem &system) {
 	act = new Action(primaryGlobalKeymap, "REMP", _("Remap keys"));
 	act->addEvent(EVENT_KEYMAPPER_REMAP);
 
-	act = new Action(primaryGlobalKeymap, "FULS", _("Toggle FullScreen"));
+	act = new Action(primaryGlobalKeymap, "FULS", _("Toggle fullscreen"));
 	act->addKeyEvent(KeyState(KEYCODE_RETURN, ASCII_RETURN, KBD_ALT));
 
 	mapper->addGlobalKeymap(primaryGlobalKeymap);
@@ -361,7 +400,12 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 	if (settings.contains("debugflags")) {
 		specialDebug = settings["debugflags"];
 		settings.erase("debugflags");
-	}
+	} else if (ConfMan.hasKey("debugflags"))
+		specialDebug = ConfMan.get("debugflags");
+
+	if (settings.contains("debug-channels-only"))
+		gDebugChannelsOnly = true;
+
 
 	PluginManager::instance().init();
  	PluginManager::instance().loadAllPlugins(); // load plugins for cached plugin manager
@@ -409,7 +453,9 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 			settings["gfx-mode"] = "default";
 		}
 	}
-
+	if (settings.contains("disable-display")) {
+		ConfMan.setInt("disable-display", 1, Common::ConfigManager::kTransientDomain);
+	}
 	setupGraphics(system);
 
 	// Init the different managers that are used by the engines.
@@ -422,16 +468,32 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 	// take place after the backend is initiated and the screen has been setup
 	system.getEventManager()->init();
 
+#ifdef ENABLE_EVENTRECORDER
 	// Directly after initializing the event manager, we will initialize our
 	// event recorder.
 	//
 	// TODO: This is just to match the current behavior, when we further extend
 	// our event recorder, we might do this at another place. Or even change
 	// the whole API for that ;-).
-	g_eventRec.init();
+	g_eventRec.RegisterEventSource();
+#endif
+
+	Common::OSDMessageQueue::instance().registerEventSource();
 
 	// Now as the event manager is created, setup the keymapper
 	setupKeymapper(system);
+
+#ifdef USE_UPDATES
+	if (!ConfMan.hasKey("updates_check")) {
+		GUI::UpdatesDialog dlg;
+		dlg.runModal();
+	}
+#endif
+
+#if defined(USE_CLOUD) && defined(USE_LIBCURL)
+	CloudMan.init();
+	CloudMan.syncSaves();
+#endif
 
 	// Unless a game was specified, show the launcher dialog
 	if (0 == ConfMan.getActiveDomain())
@@ -448,12 +510,29 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 			// to save memory
 			PluginManager::instance().unloadPluginsExcept(PLUGIN_TYPE_ENGINE, plugin);
 
+#ifdef ENABLE_EVENTRECORDER
+			Common::String recordMode = ConfMan.get("record_mode");
+			Common::String recordFileName = ConfMan.get("record_file_name");
+
+			if (recordMode == "record") {
+				g_eventRec.init(g_eventRec.generateRecordFileName(ConfMan.getActiveDomainName()), GUI::EventRecorder::kRecorderRecord);
+			} else if (recordMode == "playback") {
+				g_eventRec.init(recordFileName, GUI::EventRecorder::kRecorderPlayback);
+			} else if ((recordMode == "info") && (!recordFileName.empty())) {
+				Common::PlaybackFile record;
+				record.openRead(recordFileName);
+				debug("info:author=%s name=%s description=%s", record.getHeader().author.c_str(), record.getHeader().name.c_str(), record.getHeader().description.c_str());
+				break;
+			}
+#endif
 			// Try to run the game
 			Common::Error result = runGame(plugin, system, specialDebug);
 
+#ifdef ENABLE_EVENTRECORDER
 			// Flush Event recorder file. The recorder does not get reinitialized for next game
 			// which is intentional. Only single game per session is allowed.
 			g_eventRec.deinit();
+#endif
 
 		#if defined(UNCACHED_PLUGINS) && defined(DYNAMIC_MODULES)
 			// do our best to prevent fragmentation by unloading as soon as we can
@@ -478,30 +557,71 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 			#ifdef FORCE_RTL
 			g_system->getEventManager()->resetQuit();
 			#endif
+			#ifdef ENABLE_EVENTRECORDER
+			if (g_eventRec.checkForContinueGame()) {
+				continue;
+			}
+			#endif
+
+			// At this point, we usually return to the launcher. However, the
+			// game may have requested that one or more other games be "chained"
+			// to the current one, with optional save slots to start the games
+			// at. At the time of writing, this is used for the Maniac Mansion
+			// easter egg in Day of the Tentacle.
+
+			Common::String chainedGame;
+			int saveSlot = -1;
+
+			ChainedGamesMan.pop(chainedGame, saveSlot);
 
 			// Discard any command line options. It's unlikely that the user
 			// wanted to apply them to *all* games ever launched.
 			ConfMan.getDomain(Common::ConfigManager::kTransientDomain)->clear();
 
-			// Clear the active config domain
-			ConfMan.setActiveDomain("");
+			if (!chainedGame.empty()) {
+				if (saveSlot != -1) {
+					ConfMan.setInt("save_slot", saveSlot, Common::ConfigManager::kTransientDomain);
+				}
+				// Start the chained game
+				ConfMan.setActiveDomain(chainedGame);
+			} else {
+				// Clear the active config domain
+				ConfMan.setActiveDomain("");
+			}
 
 			PluginManager::instance().loadAllPlugins(); // only for cached manager
-
 		} else {
 			GUI::displayErrorDialog(_("Could not find any engine capable of running the selected game"));
+
+			// Clear the active domain
+			ConfMan.setActiveDomain("");
 		}
 
 		// reset the graphics to default
 		setupGraphics(system);
-		launcherDialog();
+		if (0 == ConfMan.getActiveDomain()) {
+			launcherDialog();
+		}
 	}
+#ifdef USE_CLOUD
+#ifdef USE_SDL_NET
+	Networking::LocalWebserver::destroy();
+#endif
+#ifdef USE_LIBCURL
+	Networking::ConnectionManager::destroy();
+	//I think it's important to destroy it after ConnectionManager
+	Cloud::CloudManager::destroy();
+#endif
+#endif
 	PluginManager::instance().unloadAllPlugins();
 	PluginManager::destroy();
 	GUI::GuiManager::destroy();
 	Common::ConfigManager::destroy();
 	Common::DebugManager::destroy();
-	Common::EventRecorder::destroy();
+	Common::OSDMessageQueue::destroy();
+#ifdef ENABLE_EVENTRECORDER
+	GUI::EventRecorder::destroy();
+#endif
 	Common::SearchManager::destroy();
 #ifdef USE_TRANSLATION
 	Common::TranslationManager::destroy();

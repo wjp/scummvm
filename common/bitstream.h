@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -28,6 +28,7 @@
 #include "common/scummsys.h"
 #include "common/textconsole.h"
 #include "common/stream.h"
+#include "common/types.h"
 
 namespace Common {
 
@@ -51,6 +52,9 @@ public:
 
 	/** Skip the specified amount of bits. */
 	virtual void skip(uint32 n) = 0;
+
+	/** Skip the bits to closest data value border. */
+	virtual void align() = 0;
 
 	/** Read a bit from the bit stream. */
 	virtual uint32 getBit() = 0;
@@ -85,8 +89,8 @@ protected:
 template<int valueBits, bool isLE, bool isMSB2LSB>
 class BitStreamImpl : public BitStream {
 private:
-	SeekableReadStream *_stream; ///< The input stream.
-	bool _disposeAfterUse;       ///< Should we delete the stream on destruction?
+	SeekableReadStream *_stream;			///< The input stream.
+	DisposeAfterUse::Flag _disposeAfterUse; ///< Should we delete the stream on destruction?
 
 	uint32 _value;   ///< Current value.
 	uint8  _inValue; ///< Position within the current value.
@@ -129,7 +133,7 @@ private:
 
 public:
 	/** Create a bit stream using this input data stream and optionally delete it on destruction. */
-	BitStreamImpl(SeekableReadStream *stream, bool disposeAfterUse = false) :
+	BitStreamImpl(SeekableReadStream *stream, DisposeAfterUse::Flag disposeAfterUse = DisposeAfterUse::NO) :
 		_stream(stream), _disposeAfterUse(disposeAfterUse), _value(0), _inValue(0) {
 
 		if ((valueBits != 8) && (valueBits != 16) && (valueBits != 32))
@@ -138,14 +142,14 @@ public:
 
 	/** Create a bit stream using this input data stream. */
 	BitStreamImpl(SeekableReadStream &stream) :
-		_stream(&stream), _disposeAfterUse(false), _value(0), _inValue(0) {
+		_stream(&stream), _disposeAfterUse(DisposeAfterUse::NO), _value(0), _inValue(0) {
 
 		if ((valueBits != 8) && (valueBits != 16) && (valueBits != 32))
 			error("BitStreamImpl: Invalid memory layout %d, %d, %d", valueBits, isLE, isMSB2LSB);
 	}
 
 	~BitStreamImpl() {
-		if (_disposeAfterUse)
+		if (_disposeAfterUse == DisposeAfterUse::YES)
 			delete _stream;
 	}
 
@@ -273,6 +277,12 @@ public:
 	/** Skip the specified amount of bits. */
 	void skip(uint32 n) {
 		while (n-- > 0)
+			getBit();
+	}
+
+	/** Skip the bits to closest data value border. */
+	void align() {
+		while (_inValue)
 			getBit();
 	}
 

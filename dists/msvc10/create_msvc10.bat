@@ -10,6 +10,8 @@ if "%~1"=="/all"    goto all
 if "%~1"=="/ALL"    goto all
 if "%~1"=="/tools"  goto tools
 if "%~1"=="/TOOLS"  goto tools
+if "%~1"=="/tests"  goto tests
+if "%~1"=="/TESTS"  goto tests
 if "%~1"=="/clean"  goto clean_check
 if "%~1"=="/CLEAN"  goto clean_check
 if "%~1"=="/help"   goto command_help
@@ -53,14 +55,14 @@ goto done
 echo.
 echo Creating project files with all engines enabled (stable and unstable)
 echo.
-create_project ..\.. --enable-all-engines --msvc --msvc-version 10 --build-events
+create_project ..\.. --enable-all-engines --disable-fluidsynth --disable-sdlnet --disable-libcurl --disable-updates --msvc --msvc-version 10 --build-events
 goto done
 
 :stable
 echo.
 echo Creating normal project files, with only the stable engines enabled
 echo.
-create_project ..\.. --msvc --msvc-version 10
+create_project ..\.. --disable-fluidsynth --disable-sdlnet --disable-libcurl --disable-updates --msvc --msvc-version 10
 goto done
 
 :tools
@@ -68,6 +70,13 @@ echo.
 echo Creating tools project files
 echo.
 create_project ..\.. --tools --msvc --msvc-version 10
+goto done
+
+:tests
+echo.
+echo Creating tests project files
+echo.
+create_project ..\.. --tests --msvc --msvc-version 10
 goto done
 
 :clean_check
@@ -88,6 +97,7 @@ del /Q *.props > NUL 2>&1
 del /Q *.sln* > NUL 2>&1
 del /Q scummvm* > NUL 2>&1
 del /Q devtools* > NUL 2>&1
+del /Q test_runner.cpp > NUL 2>&1
 goto done
 
 :done

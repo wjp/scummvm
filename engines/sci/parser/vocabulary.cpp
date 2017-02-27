@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -74,6 +74,8 @@ Vocabulary::Vocabulary(ResourceManager *resMan, bool foreign) : _resMan(resMan),
 
 	parser_event = NULL_REG;
 	parserIsValid = false;
+
+	_pronounReference = 0x1000; // Non-existent word
 }
 
 Vocabulary::~Vocabulary() {
@@ -119,7 +121,7 @@ bool Vocabulary::loadParserWords() {
 		}
 	}
 
-	unsigned int seeker;
+	uint32 seeker;
 	if (resourceType == kVocabularySCI1)
 		seeker = 255 * 2; // vocab.900 starts with 255 16-bit pointers which we don't use
 	else
@@ -200,13 +202,17 @@ bool Vocabulary::loadSuffixes() {
 	if (!resource)
 		return false; // No vocabulary found
 
-	unsigned int seeker = 1;
+	uint32 seeker = 1;
 
 	while ((seeker < resource->size - 1) && (resource->data[seeker + 1] != 0xff)) {
 		suffix_t suffix;
 
+		int maxSize = resource->size - seeker;
 		suffix.alt_suffix = (const char *)resource->data + seeker;
-		suffix.alt_suffix_length = strlen(suffix.alt_suffix);
+		suffix.alt_suffix_length = Common::strnlen(suffix.alt_suffix, maxSize);
+		if (suffix.alt_suffix_length == maxSize) {
+			error("Vocabulary alt appears truncated for suffix %d in resource %d at %u", _parserSuffixes.size(), resource->getNumber(), seeker);
+		}
 		seeker += suffix.alt_suffix_length + 1; // Hit end of string
 
 		suffix.result_class = (int16)READ_BE_UINT16(resource->data + seeker);
@@ -215,8 +221,12 @@ bool Vocabulary::loadSuffixes() {
 		// Beginning of next string - skip leading '*'
 		seeker++;
 
+		maxSize = resource->size - seeker;
 		suffix.word_suffix = (const char *)resource->data + seeker;
-		suffix.word_suffix_length = strlen(suffix.word_suffix);
+		suffix.word_suffix_length = Common::strnlen(suffix.word_suffix, maxSize);
+		if (suffix.word_suffix_length == maxSize) {
+			error("Vocabulary word appears truncated for suffix %d in resource %d at %u", _parserSuffixes.size(), resource->getNumber(), seeker);
+		}
 		seeker += suffix.word_suffix_length + 1;
 
 		suffix.class_mask = (int16)READ_BE_UINT16(resource->data + seeker);
@@ -286,12 +296,20 @@ bool Vocabulary::loadAltInputs() {
 		AltInput t;
 		t._input = data;
 
-		unsigned int l = strlen(data);
+		uint32 maxSize = data_end - data;
+		uint32 l = Common::strnlen(data, maxSize);
+		if (l == maxSize) {
+			error("Alt input from %d appears truncated at %ld", resource->getNumber(), (const byte *)data - resource->data);
+		}
 		t._inputLength = l;
 		data += l + 1;
 
 		t._replacement = data;
-		l = strlen(data);
+		maxSize = data_end - data;
+		l = Common::strnlen(data, maxSize);
+		if (l == maxSize) {
+			error("Alt input replacement from %d appears truncated at %ld", resource->getNumber(), (const byte *)data - resource->data);
+		}
 		data += l + 1;
 
 		if (data < data_end && strncmp(data, t._input, t._inputLength) == 0)
@@ -314,7 +332,7 @@ void Vocabulary::freeAltInputs() {
 	_altInputs.clear();
 }
 
-bool Vocabulary::checkAltInput(Common::String& text, uint16& cursorPos) {
+bool Vocabulary::checkAltInput(Common::String &text, uint16 &cursorPos) {
 	if (_altInputs.empty())
 		return false;
 	if (SELECTOR(parseLang) == -1)
@@ -323,15 +341,15 @@ bool Vocabulary::checkAltInput(Common::String& text, uint16& cursorPos) {
 		return false;
 
 	bool ret = false;
-	unsigned int loopCount = 0;
+	uint32 loopCount = 0;
 	bool changed;
 	do {
 		changed = false;
 
-		const char* t = text.c_str();
-		unsigned int tlen = text.size();
+		const char *t = text.c_str();
+		uint32 tlen = text.size();
 
-		for (unsigned int p = 0; p < tlen && !changed; ++p) {
+		for (uint32 p = 0; p < tlen && !changed; ++p) {
 			unsigned char s = t[p];
 			if (s >= _altInputs.size() || _altInputs[s].empty())
 				continue;
@@ -343,13 +361,14 @@ bool Vocabulary::checkAltInput(Common::String& text, uint16& cursorPos) {
 					continue;
 				if (strncmp(i->_input, t+p, i->_inputLength) == 0) {
 					// replace
+					const uint32 maxSize = text.size() - cursorPos;
 					if (cursorPos > p + i->_inputLength) {
-						cursorPos += strlen(i->_replacement) - i->_inputLength;
+						cursorPos += Common::strnlen(i->_replacement, maxSize) - i->_inputLength;
 					} else if (cursorPos > p) {
-						cursorPos = p + strlen(i->_replacement);
+						cursorPos = p + Common::strnlen(i->_replacement, maxSize);
 					}
 
-					for (unsigned int j = 0; j < i->_inputLength; ++j)
+					for (uint32 j = 0; j < i->_inputLength; ++j)
 						text.deleteChar(p);
 					const char *r = i->_replacement;
 					while (*r)
@@ -363,7 +382,7 @@ bool Vocabulary::checkAltInput(Common::String& text, uint16& cursorPos) {
 				}
 			}
 		}
-	} while (changed && loopCount < 10);
+	} while (changed && loopCount++ < 10);
 
 	return ret;
 }
@@ -494,8 +513,6 @@ void Vocabulary::debugDecipherSaidBlock(const byte *addr) {
 				case 0xf9:
 					debugN(">");
 					break;
-				case 0xff:
-					break;
 			}
 		}
 	} while (nextItem != 0xff);
@@ -532,18 +549,16 @@ bool Vocabulary::tokenizeString(ResultWordListList &retval, const char *sentence
 	*error = NULL;
 
 	do {
-
 		c = sentence[pos_in_sentence++];
+
 		if (Common::isAlnum(c) || (c == '-' && wordLen) || (c >= 0x80)) {
 			currentWord[wordLen] = lowerCaseMap[c];
 			++wordLen;
-		}
-		// Continue on this word */
-		// Words may contain a '-', but may not
-		// start with one.
-		else {
-			if (wordLen) { // Finished a word?
+		} else if (c == ' ' || c == '\0') {
+			// Continue on this word. Words may contain a '-', but may not start with
+			// one.
 
+			if (wordLen) { // Finished a word?
 				ResultWordList lookup_result;
 
 				// Look it up
@@ -579,7 +594,7 @@ void Vocabulary::printSuffixes() const {
 		strncpy(alt_buf, suf->alt_suffix, suf->alt_suffix_length);
 		alt_buf[suf->alt_suffix_length] = 0;
 
-		con->DebugPrintf("%4d: (%03x) -%12s  =>  -%12s (%03x)\n", i, suf->class_mask, word_buf, alt_buf, suf->result_class);
+		con->debugPrintf("%4d: (%03x) -%12s  =>  -%12s (%03x)\n", i, suf->class_mask, word_buf, alt_buf, suf->result_class);
 		++i;
 	}
 }
@@ -590,14 +605,14 @@ void Vocabulary::printParserWords() const {
 	int n = 0;
 	for (WordMap::iterator i = _parserWords.begin(); i != _parserWords.end(); ++i) {
 		for (ResultWordList::iterator j = i->_value.begin(); j != i->_value.end(); ++j) {
-			con->DebugPrintf("%4d: %03x [%03x] %20s |", n, j->_class, j->_group, i->_key.c_str());
+			con->debugPrintf("%4d: %03x [%03x] %20s |", n, j->_class, j->_group, i->_key.c_str());
 			if (n % 3 == 0)
-				con->DebugPrintf("\n");
+				con->debugPrintf("\n");
 			n++;
 		}
 	}
 
-	con->DebugPrintf("\n");
+	con->debugPrintf("\n");
 }
 
 void _vocab_recursive_ptree_dump(ParseTreeNode *tree, int blanks) {
@@ -667,15 +682,15 @@ void Vocabulary::printParserNodes(int num) {
 	Console *con = g_sci->getSciDebugger();
 
 	for (int i = 0; i < num; i++) {
-		con->DebugPrintf(" Node %03x: ", i);
+		con->debugPrintf(" Node %03x: ", i);
 		if (_parserNodes[i].type == kParseTreeLeafNode)
-			con->DebugPrintf("Leaf: %04x\n", _parserNodes[i].value);
+			con->debugPrintf("Leaf: %04x\n", _parserNodes[i].value);
 		else {
 			// FIXME: Do we really want to print the *addresses*
 			// of the left & right child?
 			// Note that one or both may be zero pointers, so we can't just
 			// print their values.
-			con->DebugPrintf("Branch: ->%p, ->%p\n",
+			con->debugPrintf("Branch: ->%p, ->%p\n",
 					(const void *)_parserNodes[i].left,
 					(const void *)_parserNodes[i].right);
 		}
@@ -696,11 +711,11 @@ int Vocabulary::parseNodes(int *i, int *pos, int type, int nr, int argc, const c
 		return *pos;
 	}
 	if (type == kParseEndOfInput) {
-		con->DebugPrintf("Unbalanced parentheses\n");
+		con->debugPrintf("Unbalanced parentheses\n");
 		return -1;
 	}
 	if (type == kParseClosingParenthesis) {
-		con->DebugPrintf("Syntax error at token %d\n", *i);
+		con->debugPrintf("Syntax error at token %d\n", *i);
 		return -1;
 	}
 
@@ -726,21 +741,95 @@ int Vocabulary::parseNodes(int *i, int *pos, int type, int nr, int argc, const c
 
 		newPos = parseNodes(i, pos, nextToken, nextValue, argc, argv);
 
+		if (newPos == -1)
+			return -1;
+
 		if (j == 0)
 			 _parserNodes[oldPos].left = &_parserNodes[newPos];
 		else
 			 _parserNodes[oldPos].right = &_parserNodes[newPos];
-
-
-		if (newPos == -1)
-			return -1;
 	}
 
 	const char *token = argv[(*i)++];
 	if (strcmp(token, ")"))
-		con->DebugPrintf("Expected ')' at token %d\n", *i);
+		con->debugPrintf("Expected ')' at token %d\n", *i);
 
 	return oldPos;
+}
+
+
+// FIXME: Duplicated from said.cpp
+static int node_major(ParseTreeNode* node) {
+	assert(node->type == kParseTreeBranchNode);
+	assert(node->left->type == kParseTreeLeafNode);
+	return node->left->value;
+}
+static bool node_is_terminal(ParseTreeNode* node) {
+	return (node->right->right &&
+            node->right->right->type != kParseTreeBranchNode);
+}
+static int node_terminal_value(ParseTreeNode* node) {
+	assert(node_is_terminal(node));
+	return node->right->right->value;
+}
+
+static ParseTreeNode* scanForMajor(ParseTreeNode *tree, int major) {
+	assert(tree);
+
+	if (node_is_terminal(tree)) {
+		if (node_major(tree) == major)
+			return tree;
+		else
+			return 0;
+	}
+
+	ParseTreeNode* ptr = tree->right;
+
+	// Scan children
+	while (ptr->right) {
+		ptr = ptr->right;
+
+		if (node_major(ptr->left) == major)
+			return ptr->left;
+	}
+
+	if (major == 0x141)
+		return 0;
+
+	// If not found, go into a 0x141 and try again
+	tree = scanForMajor(tree, 0x141);
+	if (!tree)
+		return 0;
+	return scanForMajor(tree, major);
+}
+
+bool Vocabulary::storePronounReference() {
+	assert(parserIsValid);
+
+	ParseTreeNode *ptr = scanForMajor(_parserNodes, 0x142); // 0x142 = object?
+
+	while (ptr && !node_is_terminal(ptr))
+		ptr = scanForMajor(ptr, 0x141);
+
+	if (!ptr)
+		return false;
+
+	_pronounReference = node_terminal_value(ptr);
+
+	debugC(kDebugLevelParser, "Stored pronoun reference: %x", _pronounReference);
+	return true;
+}
+
+void Vocabulary::replacePronouns(ResultWordListList &words) {
+	if (_pronounReference == 0x1000)
+		return;
+
+	for (ResultWordListList::iterator i = words.begin(); i != words.end(); ++i)
+		for (ResultWordList::iterator j = i->begin(); j != i->end(); ++j)
+			if (j->_class & (VOCAB_CLASS_PRONOUN << 4)) {
+				j->_class = VOCAB_CLASS_NOUN << 4;
+				j->_group = _pronounReference;
+			}
 }
 
 } // End of namespace Sci

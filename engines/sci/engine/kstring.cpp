@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -42,10 +42,12 @@ reg_t kStrCat(EngineState *s, int argc, reg_t *argv) {
 	Common::String s1 = s->_segMan->getString(argv[0]);
 	Common::String s2 = s->_segMan->getString(argv[1]);
 
-	// The Japanese version of PQ2 splits the two strings here
-	// (check bug #3396887).
-	if (g_sci->getGameId() == GID_PQ2 &&
-		g_sci->getLanguage() == Common::JA_JPN) {
+	// Japanese PC-9801 interpreter splits strings here
+	//  see bug #5834
+	//  Verified for Police Quest 2 + Quest For Glory 1
+	//  However Space Quest 4 PC-9801 doesn't
+	if ((g_sci->getLanguage() == Common::JA_JPN)
+		&& (getSciVersion() <= SCI_VERSION_01)) {
 		s1 = g_sci->strSplit(s1.c_str(), NULL);
 		s2 = g_sci->strSplit(s2.c_str(), NULL);
 	}
@@ -155,37 +157,50 @@ reg_t kReadNumber(EngineState *s, int argc, reg_t *argv) {
 		source++; /* Skip whitespace */
 
 	int16 result = 0;
+	int16 sign = 1;
 
+	if (*source == '-') {
+		sign = -1;
+		source++;
+	}
 	if (*source == '$') {
 		// Hexadecimal input
-		result = (int16)strtol(source + 1, NULL, 16);
+		source++;
+		char c;
+		while ((c = *source++) != 0) {
+			int16 x = 0;
+			if ((c >= '0') && (c <= '9'))
+				x = c - '0';
+			else if ((c >= 'a') && (c <= 'f'))
+				x = c - 'a' + 10;
+			else if ((c >= 'A') && (c <= 'F'))
+				x = c - 'A' + 10;
+			else
+				// Stop if we encounter anything other than a digit (like atoi)
+				break;
+			result *= 16;
+			result += x;
+		}
 	} else {
 		// Decimal input. We can not use strtol/atoi in here, because while
 		// Sierra used atoi, it was a non standard compliant atoi, that didn't
 		// do clipping. In SQ4 we get the door code in here and that's even
 		// larger than uint32!
-		if (*source == '-') {
-			result = -1;
-			source++;
-		}
-		while (*source) {
-			if ((*source < '0') || (*source > '9'))
+		char c;
+		while ((c = *source++) != 0) {
+			if ((c < '0') || (c > '9'))
 				// Stop if we encounter anything other than a digit (like atoi)
 				break;
 			result *= 10;
-			result += *source - 0x30;
-			source++;
+			result += c - '0';
 		}
 	}
+
+	result *= sign;
 
 	return make_reg(0, result);
 }
 
-
-#define ALIGN_NONE 0
-#define ALIGN_RIGHT 1
-#define ALIGN_LEFT -1
-#define ALIGN_CENTER 2
 
 /*  Format(targ_address, textresnr, index_inside_res, ...)
 ** or
@@ -194,6 +209,13 @@ reg_t kReadNumber(EngineState *s, int argc, reg_t *argv) {
 ** the supplied parameters and writes it to the targ_address.
 */
 reg_t kFormat(EngineState *s, int argc, reg_t *argv) {
+	enum {
+		ALIGN_NONE   = 0,
+		ALIGN_RIGHT  = 1,
+		ALIGN_LEFT   = -1,
+		ALIGN_CENTER = 2
+	};
+
 	uint16 *arguments;
 	reg_t dest = argv[0];
 	int maxsize = 4096; /* Arbitrary... */
@@ -281,15 +303,9 @@ reg_t kFormat(EngineState *s, int argc, reg_t *argv) {
 			case 's': { /* Copy string */
 				reg_t reg = argv[startarg + paramindex];
 
-#ifdef ENABLE_SCI32
-				// If the string is a string object, get to the actual string in the data selector
-				if (s->_segMan->isObject(reg))
-					reg = readSelector(s->_segMan, reg, SELECTOR(data));
-#endif
-
 				Common::String tempsource = g_sci->getKernel()->lookupText(reg,
 				                                  arguments[paramindex + 1]);
-				int slen = strlen(tempsource.c_str());
+				int slen = tempsource.size();
 				int extralen = strLength - slen;
 				assert((target - targetbuf) + extralen <= maxsize);
 				if (extralen < 0)
@@ -359,12 +375,6 @@ reg_t kFormat(EngineState *s, int argc, reg_t *argv) {
 			case 'u':
 				unsignedVar = true;
 			case 'd': { /* Copy decimal */
-				// In the new SCI2 kString function, %d is used for unsigned
-				// integers. An example is script 962 in Shivers - it uses %d
-				// to create file names.
-				if (getSciVersion() >= SCI_VERSION_2)
-					unsignedVar = true;
-
 				/* int templen; -- unused atm */
 				const char *format_string = "%d";
 
@@ -417,14 +427,6 @@ reg_t kFormat(EngineState *s, int argc, reg_t *argv) {
 
 	*target = 0; /* Terminate string */
 
-#ifdef ENABLE_SCI32
-	// Resize SCI32 strings if necessary
-	if (getSciVersion() >= SCI_VERSION_2) {
-		SciString *string = s->_segMan->lookupString(dest);
-		string->setSize(strlen(targetbuf) + 1);
-	}
-#endif
-
 	s->_segMan->strcpy(dest, targetbuf);
 
 	return dest; /* Return target addr */
@@ -436,31 +438,15 @@ reg_t kStrLen(EngineState *s, int argc, reg_t *argv) {
 
 
 reg_t kGetFarText(EngineState *s, int argc, reg_t *argv) {
-	Resource *textres = g_sci->getResMan()->findResource(ResourceId(kResourceTypeText, argv[0].toUint16()), 0);
-	char *seeker;
-	int counter = argv[1].toUint16();
-
-	if (!textres) {
-		error("text.%d does not exist", argv[0].toUint16());
-		return NULL_REG;
-	}
-
-	seeker = (char *)textres->data;
-
-	// The second parameter (counter) determines the number of the string
-	// inside the text resource.
-	while (counter--) {
-		while (*seeker++)
-			;
-	}
+	const Common::String text = g_sci->getKernel()->lookupText(make_reg(0, argv[0].toUint16()), argv[1].toUint16());
 
 	// If the third argument is NULL, allocate memory for the destination. This
 	// occurs in SCI1 Mac games. The memory will later be freed by the game's
 	// scripts.
 	if (argv[2] == NULL_REG)
-		s->_segMan->allocDynmem(strlen(seeker) + 1, "Mac FarText", &argv[2]);
+		s->_segMan->allocDynmem(text.size() + 1, "Mac FarText", &argv[2]);
 
-	s->_segMan->strcpy(argv[2], seeker); // Copy the string and get return value
+	s->_segMan->strcpy(argv[2], text.c_str()); // Copy the string and get return value
 	return argv[2];
 }
 
@@ -470,9 +456,9 @@ enum kMessageFunc {
 	K_MESSAGE_GET,
 	K_MESSAGE_NEXT,
 	K_MESSAGE_SIZE,
-	K_MESSAGE_REFCOND,
-	K_MESSAGE_REFVERB,
 	K_MESSAGE_REFNOUN,
+	K_MESSAGE_REFVERB,
+	K_MESSAGE_REFCOND,
 	K_MESSAGE_PUSH,
 	K_MESSAGE_POP,
 	K_MESSAGE_LASTMESSAGE
@@ -488,20 +474,15 @@ reg_t kGetMessage(EngineState *s, int argc, reg_t *argv) {
 
 reg_t kMessage(EngineState *s, int argc, reg_t *argv) {
 	uint func = argv[0].toUint16();
+	uint16 module = (argc >= 2) ? argv[1].toUint16() : 0;
 
 #ifdef ENABLE_SCI32
 	if (getSciVersion() >= SCI_VERSION_2) {
 		// In complete weirdness, SCI32 bumps up subops 3-8 to 4-9 and stubs off subop 3.
-		// In addition, SCI32 reorders the REF* subops.
 		if (func == 3)
 			error("SCI32 kMessage(3)");
-		else if (func > 3) {
+		else if (func > 3)
 			func--;
-			if (func == K_MESSAGE_REFCOND)
-				func = K_MESSAGE_REFNOUN;
-			else if (func == K_MESSAGE_REFNOUN || func == K_MESSAGE_REFVERB)
-				func--;
-		}
 	}
 #endif
 
@@ -517,19 +498,44 @@ reg_t kMessage(EngineState *s, int argc, reg_t *argv) {
 	if (argc >= 6)
 		tuple = MessageTuple(argv[2].toUint16(), argv[3].toUint16(), argv[4].toUint16(), argv[5].toUint16());
 
+	// WORKAROUND for a script bug in Pepper. When using objects together,
+	// there is code inside script 894 that shows appropriate messages.
+	// In the case of the jar of cabbage (noun 26), the relevant message
+	// shown when using any object with it is missing. This leads to the
+	// script code being triggered, which modifies the jar's noun and
+	// message selectors, and renders it useless. Thus, when using any
+	// object with the jar of cabbage, it's effectively corrupted, and
+	// can't be used on the goat to empty it, therefore the game reaches
+	// an unsolvable state. It's almost impossible to patch the offending
+	// script, as it is used in many cases. But we can prevent the
+	// corruption of the jar here: if the message is found, the offending
+	// code is never reached and the jar is never corrupted. To do this,
+	// we substitute all verbs on the cabbage jar with the default verb,
+	// which shows the "Cannot use this object with the jar" message, and
+	// never triggers the offending script code that corrupts the object.
+	// This only affects the jar of cabbage - any other object, including
+	// the empty jar has a different noun, thus it's unaffected.
+	// Fixes bug #3601090.
+	// NOTE: To fix a corrupted jar object, type "send Glass_Jar message 52"
+	// in the debugger.
+	if (g_sci->getGameId() == GID_PEPPER && func == 0 && argc >= 6 && module == 894 &&
+		tuple.noun == 26 && tuple.cond == 0 && tuple.seq == 1 &&
+		!s->_msgState->getMessage(module, tuple, NULL_REG))
+		tuple.verb = 0;
+
 	switch (func) {
 	case K_MESSAGE_GET:
-		return make_reg(0, s->_msgState->getMessage(argv[1].toUint16(), tuple, (argc == 7 ? argv[6] : NULL_REG)));
+		return make_reg(0, s->_msgState->getMessage(module, tuple, (argc == 7 ? argv[6] : NULL_REG)));
 	case K_MESSAGE_NEXT:
 		return make_reg(0, s->_msgState->nextMessage((argc == 2 ? argv[1] : NULL_REG)));
 	case K_MESSAGE_SIZE:
-		return make_reg(0, s->_msgState->messageSize(argv[1].toUint16(), tuple));
+		return make_reg(0, s->_msgState->messageSize(module, tuple));
 	case K_MESSAGE_REFCOND:
 	case K_MESSAGE_REFVERB:
 	case K_MESSAGE_REFNOUN: {
 		MessageTuple t;
 
-		if (s->_msgState->messageRef(argv[1].toUint16(), tuple, t)) {
+		if (s->_msgState->messageRef(module, tuple, t)) {
 			switch (func) {
 			case K_MESSAGE_REFCOND:
 				return make_reg(0, t.cond);
@@ -544,9 +550,9 @@ reg_t kMessage(EngineState *s, int argc, reg_t *argv) {
 	}
 	case K_MESSAGE_LASTMESSAGE: {
 		MessageTuple msg;
-		int module;
+		int lastModule;
 
-		s->_msgState->lastQuery(module, msg);
+		s->_msgState->lastQuery(lastModule, msg);
 
 		bool ok = false;
 
@@ -555,7 +561,7 @@ reg_t kMessage(EngineState *s, int argc, reg_t *argv) {
 
 			if (buffer) {
 				ok = true;
-				WRITE_LE_UINT16(buffer, module);
+				WRITE_LE_UINT16(buffer, lastModule);
 				WRITE_LE_UINT16(buffer + 2, msg.noun);
 				WRITE_LE_UINT16(buffer + 4, msg.verb);
 				WRITE_LE_UINT16(buffer + 6, msg.cond);
@@ -566,7 +572,7 @@ reg_t kMessage(EngineState *s, int argc, reg_t *argv) {
 
 			if (buffer) {
 				ok = true;
-				buffer[0] = make_reg(0, module);
+				buffer[0] = make_reg(0, lastModule);
 				buffer[1] = make_reg(0, msg.noun);
 				buffer[2] = make_reg(0, msg.verb);
 				buffer[3] = make_reg(0, msg.cond);
@@ -621,202 +627,238 @@ reg_t kStrSplit(EngineState *s, int argc, reg_t *argv) {
 
 #ifdef ENABLE_SCI32
 
-reg_t kText(EngineState *s, int argc, reg_t *argv) {
-	switch (argv[0].toUint16()) {
-	case 0:
-		return kTextSize(s, argc - 1, argv + 1);
-	default:
-		// TODO: Other subops here too, perhaps kTextColors and kTextFonts
-		warning("kText(%d)", argv[0].toUint16());
-		break;
+reg_t kString(EngineState *s, int argc, reg_t *argv) {
+	if (!s)
+		return make_reg(0, getSciVersion());
+	error("not supposed to call this");
+}
+
+reg_t kStringNew(EngineState *s, int argc, reg_t *argv) {
+	reg_t stringHandle;
+	const uint16 size = argv[0].toUint16();
+	s->_segMan->allocateArray(kArrayTypeString, size, &stringHandle);
+	return stringHandle;
+}
+
+reg_t kStringGetChar(EngineState *s, int argc, reg_t *argv) {
+	const uint16 index = argv[1].toUint16();
+
+	// Game scripts may contain static raw string data
+	if (!s->_segMan->isArray(argv[0])) {
+		const Common::String string = s->_segMan->getString(argv[0]);
+		if (index >= string.size()) {
+			return make_reg(0, 0);
+		}
+
+		return make_reg(0, (byte)string[index]);
 	}
 
+	SciArray &array = *s->_segMan->lookupArray(argv[0]);
+
+	if (index >= array.size()) {
+		return make_reg(0, 0);
+	}
+
+	return array.getAsID(index);
+}
+
+reg_t kStringFree(EngineState *s, int argc, reg_t *argv) {
+	s->_segMan->freeArray(argv[0]);
 	return s->r_acc;
 }
 
-reg_t kString(EngineState *s, int argc, reg_t *argv) {
-	uint16 op = argv[0].toUint16();
+reg_t kStringCompare(EngineState *s, int argc, reg_t *argv) {
+	const Common::String string1 = s->_segMan->getString(argv[0]);
+	const Common::String string2 = s->_segMan->getString(argv[1]);
 
-	if (g_sci->_features->detectSci2StringFunctionType() == kSci2StringFunctionNew) {
-		if (op >= 8)	// Dup, GetData have been removed
-			op += 2;
+	int result;
+	if (argc == 3) {
+		result = strncmp(string1.c_str(), string2.c_str(), argv[2].toUint16());
+	} else {
+		result = strcmp(string1.c_str(), string2.c_str());
 	}
 
-	switch (op) {
-	case 0: { // New
-		reg_t stringHandle;
-		SciString *string = s->_segMan->allocateString(&stringHandle);
-		string->setSize(argv[1].toUint16());
-
-		// Make sure the first character is a null character
-		if (string->getSize() > 0)
-			string->setValue(0, 0);
-
-		return stringHandle;
-		}
-	case 1: // Size
-		return make_reg(0, s->_segMan->getString(argv[1]).size());
-	case 2: { // At (return value at an index)
-		// Note that values are put in bytes to avoid sign extension
-		if (argv[1].getSegment() == s->_segMan->getStringSegmentId()) {
-			SciString *string = s->_segMan->lookupString(argv[1]);
-			byte val = string->getRawData()[argv[2].toUint16()];
-			return make_reg(0, val);
-		} else {
-			Common::String string = s->_segMan->getString(argv[1]);
-			byte val = string[argv[2].toUint16()];
-			return make_reg(0, val);
-		}
-	}
-	case 3: { // Atput (put value at an index)
-		SciString *string = s->_segMan->lookupString(argv[1]);
-
-		uint32 index = argv[2].toUint16();
-		uint32 count = argc - 3;
-
-		if (index + count > 65535)
-			break;
-
-		if (string->getSize() < index + count)
-			string->setSize(index + count);
-
-		for (uint16 i = 0; i < count; i++)
-			string->setValue(i + index, argv[i + 3].toUint16());
-
-		return argv[1]; // We also have to return the handle
-	}
-	case 4: // Free
-		// Freeing of strings is handled by the garbage collector
-		return s->r_acc;
-	case 5: { // Fill
-		SciString *string = s->_segMan->lookupString(argv[1]);
-		uint16 index = argv[2].toUint16();
-
-		// A count of -1 means fill the rest of the array
-		uint16 count = argv[3].toSint16() == -1 ? string->getSize() - index : argv[3].toUint16();
-		uint16 stringSize = string->getSize();
-
-		if (stringSize < index + count)
-			string->setSize(index + count);
-
-		for (uint16 i = 0; i < count; i++)
-			string->setValue(i + index, argv[4].toUint16());
-
-		return argv[1];
-	}
-	case 6: { // Cpy
-		const char *string2 = 0;
-		uint32 string2Size = 0;
-		Common::String string;
-
-		if (argv[3].getSegment() == s->_segMan->getStringSegmentId()) {
-			SciString *sstr;
-			sstr = s->_segMan->lookupString(argv[3]);
-			string2 = sstr->getRawData();
-			string2Size = sstr->getSize();
-		} else {
-			string = s->_segMan->getString(argv[3]);
-			string2 = string.c_str();
-			string2Size = string.size() + 1;
-		}
-
-		uint32 index1 = argv[2].toUint16();
-		uint32 index2 = argv[4].toUint16();
-
-		// The original engine ignores bad copies too
-		if (index2 > string2Size)
-			break;
-
-		// A count of -1 means fill the rest of the array
-		uint32 count = argv[5].toSint16() == -1 ? string2Size - index2 + 1 : argv[5].toUint16();
-		reg_t strAddress = argv[1];
-
-		SciString *string1 = s->_segMan->lookupString(argv[1]);
-		//SciString *string1 = !argv[1].isNull() ? s->_segMan->lookupString(argv[1]) : s->_segMan->allocateString(&strAddress);
-
-		if (string1->getSize() < index1 + count)
-			string1->setSize(index1 + count);
-
-		// Note: We're accessing from c_str() here because the
-		// string's size ignores the trailing 0 and therefore
-		// triggers an assert when doing string2[i + index2].
-		for (uint16 i = 0; i < count; i++)
-			string1->setValue(i + index1, string2[i + index2]);
-
-		return strAddress;
-	}
-	case 7: { // Cmp
-		Common::String string1 = argv[1].isNull() ? "" : s->_segMan->getString(argv[1]);
-		Common::String string2 = argv[2].isNull() ? "" : s->_segMan->getString(argv[2]);
-
-		if (argc == 4) // Strncmp
-			return make_reg(0, strncmp(string1.c_str(), string2.c_str(), argv[3].toUint16()));
-		else           // Strcmp
-			return make_reg(0, strcmp(string1.c_str(), string2.c_str()));
-	}
-	case 8: { // Dup
-		reg_t stringHandle;
-
-		SciString *dupString = s->_segMan->allocateString(&stringHandle);
-
-		if (argv[1].getSegment() == s->_segMan->getStringSegmentId()) {
-			*dupString = *s->_segMan->lookupString(argv[1]);
-		} else {
-			dupString->fromString(s->_segMan->getString(argv[1]));
-		}
-
-		return stringHandle;
-	}
-	case 9: // Getdata
-		if (!s->_segMan->isHeapObject(argv[1]))
-			return argv[1];
-
-		return readSelector(s->_segMan, argv[1], SELECTOR(data));
-	case 10: // Stringlen
-		return make_reg(0, s->_segMan->strlen(argv[1]));
-	case 11: { // Printf
-		reg_t stringHandle;
-		s->_segMan->allocateString(&stringHandle);
-
-		reg_t *adjustedArgs = new reg_t[argc];
-		adjustedArgs[0] = stringHandle;
-		memcpy(&adjustedArgs[1], argv + 1, (argc - 1) * sizeof(reg_t));
-
-		kFormat(s, argc, adjustedArgs);
-		delete[] adjustedArgs;
-		return stringHandle;
-		}
-	case 12: // Printf Buf
-		return kFormat(s, argc - 1, argv + 1);
-	case 13: { // atoi
-		Common::String string = s->_segMan->getString(argv[1]);
-		return make_reg(0, (uint16)atoi(string.c_str()));
-	}
-	// New subops in SCI2.1 late / SCI3
-	case 14:	// unknown
-		warning("kString, subop %d", op);
-		return NULL_REG;
-	case 15: { // upper
-		Common::String string = s->_segMan->getString(argv[1]);
-
-		string.toUppercase();
-		s->_segMan->strcpy(argv[1], string.c_str());
-		return NULL_REG;
-	}
-	case 16: { // lower
-		Common::String string = s->_segMan->getString(argv[1]);
-
-		string.toLowercase();
-		s->_segMan->strcpy(argv[1], string.c_str());
-		return NULL_REG;
-	}
-	default:
-		error("Unknown kString subop %d", argv[0].toUint16());
-	}
-
-	return NULL_REG;
+	return make_reg(0, (result > 0) - (result < 0));
 }
 
+reg_t kStringGetData(EngineState *s, int argc, reg_t *argv) {
+	if (s->_segMan->isObject(argv[0])) {
+		return readSelector(s->_segMan, argv[0], SELECTOR(data));
+	}
+
+	return argv[0];
+}
+
+reg_t kStringLength(EngineState *s, int argc, reg_t *argv) {
+	return make_reg(0, s->_segMan->getString(argv[0]).size());
+}
+
+namespace {
+	bool isFlag(const char c) {
+		return strchr("-+ 0#", c);
+	}
+
+	bool isPrecision(const char c) {
+		return strchr(".0123456789*", c);
+	}
+
+	bool isWidth(const char c) {
+		return strchr("0123456789*", c);
+	}
+
+	bool isLength(const char c) {
+		return strchr("hjlLtz", c);
+	}
+
+	bool isType(const char c) {
+		return strchr("dsuxXaAceEfFgGinop", c);
+	}
+
+	bool isSignedType(const char type) {
+		// For whatever reason, %d ends up being treated as unsigned in SSCI
+		return type == 'i';
+	}
+
+	bool isUnsignedType(const char type) {
+		return strchr("duxXoc", type);
+	}
+
+	bool isStringType(const char type) {
+		return type == 's';
+	}
+
+	Common::String readPlaceholder(const char *&in, reg_t arg) {
+		const char *const start = in;
+
+		assert(*in == '%');
+		++in;
+
+		while (isFlag(*in)) {
+			++in;
+		}
+		while (isWidth(*in)) {
+			++in;
+		}
+		while (isPrecision(*in)) {
+			++in;
+		}
+		while (isLength(*in)) {
+			++in;
+		}
+
+		char format[64];
+		format[0] = '\0';
+		const char type = *in++;
+		Common::strlcpy(format, start, MIN<size_t>(64, in - start + 1));
+
+		if (isType(type)) {
+			if (isSignedType(type)) {
+				const int value = arg.toSint16();
+				return Common::String::format(format, value);
+			} else if (isUnsignedType(type)) {
+				const uint value = arg.toUint16();
+				return Common::String::format(format, value);
+			} else if (isStringType(type)) {
+				Common::String value;
+				SegManager *segMan = g_sci->getEngineState()->_segMan;
+				if (segMan->isObject(arg)) {
+					value = segMan->getString(readSelector(segMan, arg, SELECTOR(data)));
+				} else {
+					value = segMan->getString(arg);
+				}
+				return Common::String::format(format, value.c_str());
+			} else {
+				error("Unsupported format type %c", type);
+			}
+		} else {
+			return Common::String::format("%s", format);
+		}
+	}
+}
+
+Common::String format(const Common::String &source, int argc, const reg_t *argv) {
+	Common::String out;
+	const char *in = source.c_str();
+	int argIndex = 0;
+	while (*in != '\0') {
+		if (*in == '%') {
+			if (in[1] == '%') {
+				in += 2;
+				out += "%";
+				continue;
+			}
+
+			if (argIndex < argc) {
+				out += readPlaceholder(in, argv[argIndex++]);
+			} else {
+				out += readPlaceholder(in, NULL_REG);
+			}
+		} else {
+			out += *in++;
+		}
+	}
+
+	return out;
+}
+
+reg_t kStringFormat(EngineState *s, int argc, reg_t *argv) {
+	reg_t stringHandle;
+	SciArray &target = *s->_segMan->allocateArray(kArrayTypeString, 0, &stringHandle);
+	reg_t source = argv[0];
+	// Str objects may be passed in place of direct references to string data
+	if (s->_segMan->isObject(argv[0])) {
+		source = readSelector(s->_segMan, argv[0], SELECTOR(data));
+	}
+	target.fromString(format(s->_segMan->getString(source), argc - 1, argv + 1));
+	return stringHandle;
+}
+
+reg_t kStringFormatAt(EngineState *s, int argc, reg_t *argv) {
+	SciArray &target = *s->_segMan->lookupArray(argv[0]);
+	reg_t source = argv[1];
+	// Str objects may be passed in place of direct references to string data
+	if (s->_segMan->isObject(argv[1])) {
+		source = readSelector(s->_segMan, argv[1], SELECTOR(data));
+	}
+	target.fromString(format(s->_segMan->getString(source), argc - 2, argv + 2));
+	return argv[0];
+}
+
+reg_t kStringToInteger(EngineState *s, int argc, reg_t *argv) {
+	return make_reg(0, (uint16)s->_segMan->getString(argv[0]).asUint64());
+}
+
+reg_t kStringTrim(EngineState *s, int argc, reg_t *argv) {
+	SciArray &array = *s->_segMan->lookupArray(argv[0]);
+	const int8 flags = argv[1].toSint16();
+	const char showChar = argc > 2 ? argv[2].toSint16() : '\0';
+	array.trim(flags, showChar);
+	return s->r_acc;
+}
+
+reg_t kStringToUpperCase(EngineState *s, int argc, reg_t *argv) {
+	Common::String string = s->_segMan->getString(argv[0]);
+	string.toUppercase();
+	s->_segMan->strcpy(argv[0], string.c_str());
+	return argv[0];
+}
+
+reg_t kStringToLowerCase(EngineState *s, int argc, reg_t *argv) {
+	Common::String string = s->_segMan->getString(argv[0]);
+	string.toLowercase();
+	s->_segMan->strcpy(argv[0], string.c_str());
+	return argv[0];
+}
+
+reg_t kStringReplaceSubstring(EngineState *s, int argc, reg_t *argv) {
+	error("TODO: kStringReplaceSubstring not implemented");
+	return argv[3];
+}
+
+reg_t kStringReplaceSubstringEx(EngineState *s, int argc, reg_t *argv) {
+	error("TODO: kStringReplaceSubstringEx not implemented");
+	return argv[3];
+}
 #endif
 
 } // End of namespace Sci

@@ -8,27 +8,27 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  */
 
-#ifndef RING_GRAPHICS_H
-#define RING_GRAPHICS_H
+#ifndef TSAGE_GRAPHICS_H
+#define TSAGE_GRAPHICS_H
 
 #include "tsage/events.h"
 #include "tsage/saveload.h"
 #include "common/list.h"
 #include "common/rect.h"
 #include "common/system.h"
-#include "graphics/surface.h"
+#include "graphics/screen.h"
 
 namespace TsAGE {
 
@@ -71,39 +71,44 @@ public:
 	LineSlice(int xStart, int xEnd) { xs = xStart; xe = xEnd; }
 };
 
-class GfxSurface {
+enum FrameFlag { FRAME_FLIP_CENTROID_X = 4, FRAME_FLIP_CENTROID_Y = 8 };
+
+/**
+ * Surface class. This derivces from Graphics::Screen because it has
+ * logic we'll need for our own Screen class that derives from this one
+ */
+ class GfxSurface: public Graphics::Screen {
 private:
-	Graphics::Surface *_customSurface;
 	int _lockSurfaceCtr;
+	Graphics::ManagedSurface _rawSurface;
 
 	bool _disableUpdates;
 	Rect _bounds;
-
-	bool _trackDirtyRects;
-	Common::List<Rect> _dirtyRects;
-
-	void mergeDirtyRects();
-	bool unionRectangle(Common::Rect &destRect, const Rect &src1, const Rect &src2);
-
+ protected:
+	 /**
+	  * Override the addDirtyRect from Graphics::Screen, since for standard
+	  * surfaces we don't need dirty rects to be tracked
+	  */
+	 virtual void addDirtyRect(const Common::Rect &r) {}
 public:
 	Common::Point _centroid;
 	int _transColor;
+	Rect _clipRect;
+	byte _flags;
 public:
 	GfxSurface();
 	GfxSurface(const GfxSurface &s);
-	~GfxSurface();
+	virtual ~GfxSurface();
 
-	void setScreenSurface();
-	void updateScreen();
-	void addDirtyRect(const Rect &r);
-	Graphics::Surface lockSurface();
+	Graphics::ManagedSurface &lockSurface();
 	void unlockSurface();
 	void synchronize(Serializer &s);
-	void create(int width, int height);
-	void setBounds(const Rect &bounds) { _bounds = bounds; }
+	virtual void create(uint16 width, uint16 height);
+	void setBounds(const Rect &bounds);
 	const Rect &getBounds() const { return _bounds; }
 
-	void copyFrom(GfxSurface &src, Rect srcBounds, Rect destBounds, Region *priorityRegion = NULL);
+	void copyFrom(GfxSurface &src, Rect srcBounds, Rect destBounds,
+		Region *priorityRegion = NULL, const byte *shadowMap = NULL);
 	void copyFrom(GfxSurface &src, Rect destBounds, Region *priorityRegion = NULL) {
 		copyFrom(src, src.getBounds(), destBounds, priorityRegion);
 	}
@@ -113,10 +118,9 @@ public:
 		copyFrom(src, tempRect, priorityRegion);
 	}
 	void draw(const Common::Point &pt, Rect *rect = NULL);
-	void fillRect(const Rect &bounds, int color);
 	GfxSurface &operator=(const GfxSurface &s);
 
-	static void loadScreenSection(Graphics::Surface &dest, int xHalf, int yHalf, int xSection, int ySection);
+	static void loadScreenSection(Graphics::ManagedSurface &dest, int xHalf, int yHalf, int xSection, int ySection);
 	static bool displayText(const Common::String &msg, const Common::Point &pt = Common::Point(160, 100));
 };
 
@@ -162,7 +166,6 @@ public:
 
 class GfxFontBackup {
 private:
-	GfxSurface *_surface;
 	Common::Point _edgeSize;
 	Common::Point _position;
 	GfxColors _colors;
@@ -276,7 +279,7 @@ public:
 	void getStringBounds(const char *s, Rect &bounds, int maxWidth);
 
 	void setDialogPalette();
-	Graphics::Surface lockSurface() {
+	Graphics::ManagedSurface lockSurface() {
 		_surface.setBounds(_bounds);
 		return _surface.lockSurface();
 	}
@@ -303,6 +306,7 @@ public:
 	}
 	void copyFrom(GfxSurface &src, Rect destBounds, Region *priorityRegion = NULL);
 	void copyFrom(GfxSurface &src, int destX, int destY);
+	void copyFrom(GfxSurface &src, const Rect &srcBounds, const Rect &destBounds);
 
 	GfxSurface &getSurface() {
 		_surface.setBounds(_bounds);
@@ -337,6 +341,8 @@ public:
 	virtual void draw();
 
 	static void setPalette();
+
+	virtual bool handleKeypress(Event &evt, GfxButton *&btn) { return false; }
 };
 
 GfxSurface *surfaceGetArea(GfxSurface &src, const Rect &bounds);

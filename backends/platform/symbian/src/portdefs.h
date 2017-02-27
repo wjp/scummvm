@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #ifndef SYMBIAN_PORTDEFS_H
@@ -57,9 +58,18 @@ typedef signed long int int32;
 // re-define those data types.
 #define SCUMMVM_DONT_DEFINE_TYPES
 
-#define SMALL_SCREEN_DEVICE
+// Hide the macro "remove" defined in unistd.h from anywere except where
+// we explicitly require it. This lets us use the name "remove" in engines.
+// Must be after including unistd.h .
+#ifndef SYMBIAN_USE_SYSTEM_REMOVE
+#undef remove
+#endif
+
+#define GUI_ONLY_FULLSCREEN
+#define GUI_ENABLE_KEYSDIALOG
 
 #define DISABLE_COMMAND_LINE
+#define USE_RGB_COLOR
 
 #if defined(USE_TREMOR) && !defined(USE_VORBIS)
 #define USE_VORBIS // make sure this one is defined together with USE_TREMOR!

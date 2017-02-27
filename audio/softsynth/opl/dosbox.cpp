@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 /*
@@ -31,6 +32,7 @@
 #include "dosbox.h"
 #include "dbopl.h"
 
+#include "audio/mixer.h"
 #include "common/system.h"
 #include "common/scummsys.h"
 #include "common/util.h"
@@ -147,6 +149,7 @@ OPL::OPL(Config::OplType type) : _type(type), _rate(0), _emulator(0) {
 }
 
 OPL::~OPL() {
+	stop();
 	free();
 }
 
@@ -155,7 +158,7 @@ void OPL::free() {
 	_emulator = 0;
 }
 
-bool OPL::init(int rate) {
+bool OPL::init() {
 	free();
 
 	memset(&_reg, 0, sizeof(_reg));
@@ -166,19 +169,19 @@ bool OPL::init(int rate) {
 		return false;
 
 	DBOPL::InitTables();
-	_emulator->Setup(rate);
+	_rate = g_system->getMixer()->getOutputRate();
+	_emulator->Setup(_rate);
 
 	if (_type == Config::kDualOpl2) {
 		// Setup opl3 mode in the hander
 		_emulator->WriteReg(0x105, 1);
 	}
 
-	_rate = rate;
 	return true;
 }
 
 void OPL::reset() {
-	init(_rate);
+	init();
 }
 
 void OPL::write(int port, int val) {
@@ -247,7 +250,7 @@ byte OPL::read(int port) {
 }
 
 void OPL::writeReg(int r, int v) {
-	byte tempReg = 0;
+	int tempReg = 0;
 	switch (_type) {
 	case Config::kOpl2:
 	case Config::kDualOpl2:
@@ -257,12 +260,27 @@ void OPL::writeReg(int r, int v) {
 		// Backup old setup register
 		tempReg = _reg.normal;
 
-		// We need to set the register we want to write to via port 0x388
-		write(0x388, r);
-		// Do the real writing to the register
-		write(0x389, v);
+		// We directly allow writing to secondary OPL3 registers by using
+		// register values >= 0x100.
+		if (_type == Config::kOpl3 && r >= 0x100) {
+			// We need to set the register we want to write to via port 0x222,
+			// since we want to write to the secondary register set.
+			write(0x222, r);
+			// Do the real writing to the register
+			write(0x223, v);
+		} else {
+			// We need to set the register we want to write to via port 0x388
+			write(0x388, r);
+			// Do the real writing to the register
+			write(0x389, v);
+		}
+
 		// Restore the old register
-		write(0x388, tempReg);
+		if (_type == Config::kOpl3 && tempReg >= 0x100) {
+			write(0x222, tempReg & ~0x100);
+		} else {
+			write(0x388, tempReg);
+		}
 		break;
 	};
 }
@@ -291,7 +309,7 @@ void OPL::dualWrite(uint8 index, uint8 reg, uint8 val) {
 	_emulator->WriteReg(fullReg, val);
 }
 
-void OPL::readBuffer(int16 *buffer, int length) {
+void OPL::generateSamples(int16 *buffer, int length) {
 	// For stereo OPL cards, we divide the sample count by 2,
 	// to match stereo AudioStream behavior.
 	if (_type != Config::kOpl2)

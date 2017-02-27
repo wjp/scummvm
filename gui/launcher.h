@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #ifndef GUI_LAUNCHER_DIALOG_H
@@ -46,17 +47,19 @@ public:
 	LauncherDialog();
 	~LauncherDialog();
 
+	void rebuild();
+
 	virtual void handleCommand(CommandSender *sender, uint32 cmd, uint32 data);
 
 	virtual void handleKeyDown(Common::KeyState state);
 	virtual void handleKeyUp(Common::KeyState state);
-
+	bool doGameDetection(const Common::String &path);
 protected:
 	EditTextWidget  *_searchWidget;
 	ListWidget		*_list;
 	ButtonWidget	*_addButton;
 	Widget			*_startButton;
-	Widget			*_loadButton;
+	ButtonWidget	*_loadButton;
 	Widget			*_editButton;
 	Widget			*_removeButton;
 #ifndef DISABLE_FANCY_THEMES
@@ -80,6 +83,10 @@ protected:
 	void updateListing();
 
 	void updateButtons();
+	void switchButtonsText(ButtonWidget *button, const char *normalText, const char *shiftedText);
+
+	void build();
+	void clean();
 
 	void open();
 	void close();
@@ -100,6 +107,16 @@ protected:
 	void editGame(int item);
 
 	/**
+	 * Facade for "Load..."/"Record..." buttons.
+	 */
+	void loadGameButtonPressed(int item);
+
+	/**
+	 * Handle "Record..." button.
+	 */
+	void recordGame(int item);
+
+	/**
 	 * Handle "Load..." button.
 	 */
 	void loadGame(int item);
@@ -111,6 +128,8 @@ protected:
 	 * @target	name of target to select
 	 */
 	void selectTarget(const String &target);
+private:
+	bool checkModifier(int modifier);
 };
 
 } // End of namespace GUI

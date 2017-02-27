@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -46,6 +46,7 @@ GfxMenu::GfxMenu(EventManager *event, SegManager *segMan, GfxPorts *ports, GfxPa
 	_menuSaveHandle = NULL_REG;
 	_barSaveHandle = NULL_REG;
 	_oldPort = NULL;
+	_mouseOldState = false;
 
 	reset();
 }
@@ -314,7 +315,7 @@ void GfxMenu::kernelSetAttribute(uint16 menuId, uint16 itemId, uint16 attributeI
 reg_t GfxMenu::kernelGetAttribute(uint16 menuId, uint16 itemId, uint16 attributeId) {
 	GuiMenuItemEntry *itemEntry = findItem(menuId, itemId);
 	if (!itemEntry)
-		error("Tried to getAttribute() on non-existant menu-item %d:%d", menuId, itemId);
+		error("Tried to getAttribute() on non-existent menu-item %d:%d", menuId, itemId);
 	switch (attributeId) {
 	case SCI_MENU_ATTRIBUTE_ENABLED:
 		if (itemEntry->enabled)
@@ -423,8 +424,12 @@ reg_t GfxMenu::kernelSelect(reg_t eventObject, bool pauseSound) {
 		default:
 			while (itemIterator != itemEnd) {
 				itemEntry = *itemIterator;
+				// Sierra actually did not check the modifier, they only checked the ascii code
+				// Which is why for example pressing Ctrl-I and Shift-Ctrl-I both brought up the inventory in QfG1
+				// We still check the modifier, but we need to isolate the lower byte, because of a keyboard
+				// driver bug (see engine/kevent.cpp / kGetEvent)
 				if (itemEntry->keyPress == keyPress &&
-					itemEntry->keyModifier == keyModifier &&
+					itemEntry->keyModifier == (keyModifier & 0xFF) &&
 					itemEntry->enabled)
 					break;
 				itemIterator++;
@@ -742,7 +747,7 @@ GuiMenuItemEntry *GfxMenu::interactiveWithKeyboard() {
 			// - sierra didn't wrap around when changing item id
 			// - sierra allowed item id to be 0, which didn't make any sense
 			do {
-				switch (curEvent.data) {
+				switch (curEvent.character) {
 				case SCI_KEY_ESC:
 					_curMenuId = curItemEntry->menuId; _curItemId = curItemEntry->id;
 					return NULL;
@@ -771,10 +776,10 @@ GuiMenuItemEntry *GfxMenu::interactiveWithKeyboard() {
 					newMenuId = newItemEntry->menuId; newItemId = newItemEntry->id;
 
 					// if we do this step again because of a separator line -> don't repeat left/right, but go down
-					switch (curEvent.data) {
+					switch (curEvent.character) {
 					case SCI_KEY_LEFT:
 					case SCI_KEY_RIGHT:
-						curEvent.data = SCI_KEY_DOWN;
+						curEvent.character = SCI_KEY_DOWN;
 					}
 				}
 			} while (newItemEntry->separatorLine);

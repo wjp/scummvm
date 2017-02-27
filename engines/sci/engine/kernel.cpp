@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -35,8 +35,9 @@ namespace Sci {
 
 Kernel::Kernel(ResourceManager *resMan, SegManager *segMan)
 	: _resMan(resMan), _segMan(segMan), _invalid("<invalid>") {
-	loadSelectorNames();
-	mapSelectors();      // Map a few special selectors for later use
+#ifdef ENABLE_SCI32
+	_kernelFunc_StringId = 0;
+#endif
 }
 
 Kernel::~Kernel() {
@@ -51,6 +52,11 @@ Kernel::~Kernel() {
 		}
 		delete[] it->signature;
 	}
+}
+
+void Kernel::init() {
+	loadSelectorNames();
+	mapSelectors();      // Map a few special selectors for later use
 }
 
 uint Kernel::getSelectorNamesSize() const {
@@ -78,12 +84,18 @@ uint Kernel::getKernelNamesSize() const {
 }
 
 const Common::String &Kernel::getKernelName(uint number) const {
-	// FIXME: The following check is a temporary workaround for an issue
-	// leading to crashes when using the debugger's backtrace command.
-	if (number >= _kernelNames.size())
-		return _invalid;
+	assert(number < _kernelFuncs.size());
 	return _kernelNames[number];
 }
+
+Common::String Kernel::getKernelName(uint number, uint subFunction) const {
+	assert(number < _kernelFuncs.size());
+	const KernelFunction &kernelCall = _kernelFuncs[number];
+
+	assert(subFunction < kernelCall.subFunctionCount);
+	return kernelCall.subFunctions[subFunction].name;
+}
+
 
 int Kernel::findKernelFuncPos(Common::String kernelFuncName) {
 	for (uint32 i = 0; i < _kernelNames.size(); i++)
@@ -104,13 +116,18 @@ int Kernel::findSelector(const char *selectorName) const {
 	return -1;
 }
 
+// used by Script patcher to figure out, if it's okay to initialize signature/patch-table
+bool Kernel::selectorNamesAvailable() {
+	return !_selectorNames.empty();
+}
+
 void Kernel::loadSelectorNames() {
 	Resource *r = _resMan->findResource(ResourceId(kResourceTypeVocab, VOCAB_RESOURCE_SELECTORS), 0);
 	bool oldScriptHeader = (getSciVersion() == SCI_VERSION_0_EARLY);
 
 	// Starting with KQ7, Mac versions have a BE name table. GK1 Mac and earlier (and all
 	// other platforms) always use LE.
-	bool isBE = (g_sci->getPlatform() == Common::kPlatformMacintosh && getSciVersion() >= SCI_VERSION_2_1
+	bool isBE = (g_sci->getPlatform() == Common::kPlatformMacintosh && getSciVersion() >= SCI_VERSION_2_1_EARLY
 			&& g_sci->getGameId() != GID_GK1);
 
 	if (!r) { // No such resource?
@@ -132,7 +149,7 @@ void Kernel::loadSelectorNames() {
 		return;
 	}
 
-	int count = isBE ? READ_BE_UINT16(r->data) : READ_LE_UINT16(r->data) + 1; // Counter is slightly off
+	int count = (isBE ? READ_BE_UINT16(r->data) : READ_LE_UINT16(r->data)) + 1; // Counter is slightly off
 
 	for (int i = 0; i < count; i++) {
 		int offset = isBE ? READ_BE_UINT16(r->data + 2 + i * 2) : READ_LE_UINT16(r->data + 2 + i * 2);
@@ -154,8 +171,11 @@ void Kernel::loadSelectorNames() {
 // (io) -> optionally integer AND an object
 // (i) -> optional integer
 // . -> any type
-// i* -> optional multiple integers
-// .* -> any parameters afterwards (or none)
+// i* -> at least one integer, more integers may follow after that
+// (i*) -> optional multiple integers
+// .* -> at least one parameter of any type and more parameters of any type may follow
+// (.*) -> any parameters afterwards (or none)
+// * -> means "more of the last parameter may follow (or none at all)", must be at the end of a signature. Is not valid anywhere else.
 static uint16 *parseKernelSignature(const char *kernelName, const char *writtenSig) {
 	const char *curPos;
 	char curChar;
@@ -390,7 +410,7 @@ uint16 Kernel::findRegType(reg_t reg) {
 	case SEG_TYPE_HUNK:
 #ifdef ENABLE_SCI32
 	case SEG_TYPE_ARRAY:
-	case SEG_TYPE_STRING:
+	case SEG_TYPE_BITMAP:
 #endif
 		result |= SIG_TYPE_REFERENCE;
 		break;
@@ -424,57 +444,66 @@ static const SignatureDebugType signatureDebugTypeList[] = {
 	{ 0,                      NULL }
 };
 
-static void kernelSignatureDebugType(const uint16 type) {
+static void kernelSignatureDebugType(Common::String &signatureDetailsStr, const uint16 type) {
 	bool firstPrint = true;
 
 	const SignatureDebugType *list = signatureDebugTypeList;
 	while (list->typeCheck) {
 		if (type & list->typeCheck) {
 			if (!firstPrint)
-				debugN(", ");
-			debugN("%s", list->text);
+//				debugN(", ");
+				signatureDetailsStr += ", ";
+//			debugN("%s", list->text);
+//			signatureDetailsStr += signatureDetailsStr.format("%s", list->text);
+			signatureDetailsStr += list->text;
 			firstPrint = false;
 		}
 		list++;
 	}
 }
 
-// Shows kernel call signature and current arguments for debugging purposes
-void Kernel::signatureDebug(const uint16 *sig, int argc, const reg_t *argv) {
+// Create string, that holds the details of a kernel call signature and current arguments
+//  For debugging purposes
+void Kernel::signatureDebug(Common::String &signatureDetailsStr, const uint16 *sig, int argc, const reg_t *argv) {
 	int argnr = 0;
+
+	// add ERROR: to debug output
+	debugN("ERROR:");
+
 	while (*sig || argc) {
-		debugN("parameter %d: ", argnr++);
+		// add leading spaces for additional parameters
+		signatureDetailsStr += signatureDetailsStr.format("parameter %d: ", argnr++);
 		if (argc) {
 			reg_t parameter = *argv;
-			debugN("%04x:%04x (", PRINT_REG(parameter));
+			signatureDetailsStr += signatureDetailsStr.format("%04x:%04x (", PRINT_REG(parameter));
 			int regType = findRegType(parameter);
 			if (regType)
-				kernelSignatureDebugType(regType);
+				kernelSignatureDebugType(signatureDetailsStr, regType);
 			else
-				debugN("unknown type of %04x:%04x", PRINT_REG(parameter));
-			debugN(")");
+				signatureDetailsStr += signatureDetailsStr.format("unknown type of %04x:%04x", PRINT_REG(parameter));
+			signatureDetailsStr += ")";
 			argv++;
 			argc--;
 		} else {
-			debugN("not passed");
+			signatureDetailsStr += "not passed";
 		}
 		if (*sig) {
 			const uint16 signature = *sig;
 			if ((signature & SIG_MAYBE_ANY) == SIG_MAYBE_ANY) {
-				debugN(", may be any");
+				signatureDetailsStr += ", may be any";
 			} else {
-				debugN(", should be ");
-				kernelSignatureDebugType(signature);
+				signatureDetailsStr += ", should be ";
+				kernelSignatureDebugType(signatureDetailsStr, signature);
 			}
 			if (signature & SIG_IS_OPTIONAL)
-				debugN(" (optional)");
+				signatureDetailsStr += " (optional)";
 			if (signature & SIG_NEEDS_MORE)
-				debugN(" (needs more)");
+				signatureDetailsStr += " (needs more)";
 			if (signature & SIG_MORE_MAY_FOLLOW)
-				debugN(" (more may follow)");
+				signatureDetailsStr += " (more may follow)";
 			sig++;
 		}
-		debugN("\n");
+		signatureDetailsStr += "\n";
 	}
 }
 
@@ -536,7 +565,7 @@ void Kernel::mapFunctions() {
 	SciVersion myVersion = getSciVersion();
 
 	switch (g_sci->getPlatform()) {
-	case Common::kPlatformPC:
+	case Common::kPlatformDOS:
 	case Common::kPlatformFMTowns:
 		platformMask = SIGFOR_DOS;
 		break;
@@ -584,6 +613,21 @@ void Kernel::mapFunctions() {
 			_kernelFuncs[id].function = kDummy;
 			continue;
 		}
+
+#ifdef ENABLE_SCI32
+		if (kernelName == "String") {
+			_kernelFunc_StringId = id;
+		}
+
+		// HACK: Phantasmagoria Mac uses a modified kDoSound (which *nothing*
+		// else seems to use)!
+		if (g_sci->getPlatform() == Common::kPlatformMacintosh && g_sci->getGameId() == GID_PHANTASMAGORIA && kernelName == "DoSound") {
+			_kernelFuncs[id].function = kDoSoundPhantasmagoriaMac;
+			_kernelFuncs[id].signature = parseKernelSignature("DoSoundPhantasmagoriaMac", "i.*");
+			_kernelFuncs[id].name = "DoSoundPhantasmagoriaMac";
+			continue;
+		}
+#endif
 
 		// If the name is known, look it up in s_kernelMap. This table
 		// maps kernel func names to actual function (pointers).
@@ -814,11 +858,11 @@ void Kernel::loadKernelNames(GameFeatures *features) {
 			// In the Windows version of KQ6 CD, the empty kSetSynonyms
 			// function has been replaced with kPortrait. In KQ6 Mac,
 			// kPlayBack has been replaced by kShowMovie.
-			if (g_sci->getPlatform() == Common::kPlatformWindows)
+			if ((g_sci->getPlatform() == Common::kPlatformWindows) || (g_sci->forceHiresGraphics()))
 				_kernelNames[0x26] = "Portrait";
 			else if (g_sci->getPlatform() == Common::kPlatformMacintosh)
 				_kernelNames[0x84] = "ShowMovie";
-		} else if (g_sci->getGameId() == GID_QFG4 && g_sci->isDemo()) {
+		} else if (g_sci->getGameId() == GID_QFG4DEMO) {
 			_kernelNames[0x7b] = "RemapColors"; // QFG4 Demo has this SCI2 function instead of StrSplit
 		}
 
@@ -835,15 +879,17 @@ void Kernel::loadKernelNames(GameFeatures *features) {
 		_kernelNames = Common::StringArray(sci2_default_knames, kKernelEntriesSci2);
 		break;
 
-	case SCI_VERSION_2_1:
+	case SCI_VERSION_2_1_EARLY:
+	case SCI_VERSION_2_1_MIDDLE:
+	case SCI_VERSION_2_1_LATE:
 		if (features->detectSci21KernelType() == SCI_VERSION_2) {
 			// Some early SCI2.1 games use a modified SCI2 kernel table instead of
 			// the SCI2.1 kernel table. We detect which version to use based on
 			// how kDoSound is called from Sound::play().
 			// Known games that use this:
 			// GK2 demo
-			// KQ7 1.4
-			// PQ4 SWAT demo
+			// KQ7 1.4/1.51
+			// PQ:SWAT demo
 			// LSL6
 			// PQ4CD
 			// QFG4CD
@@ -854,11 +900,16 @@ void Kernel::loadKernelNames(GameFeatures *features) {
 
 			_kernelNames = Common::StringArray(sci2_default_knames, kKernelEntriesGk2Demo);
 			// OnMe is IsOnMe here, but they should be compatible
-			_kernelNames[0x23] = "Robot"; // Graph in SCI2
+			_kernelNames[0x23] = g_sci->getGameId() == GID_LSL6HIRES ? "Empty" : "Robot"; // Graph in SCI2
 			_kernelNames[0x2e] = "Priority"; // DisposeTextBitmap in SCI2
 		} else {
 			// Normal SCI2.1 kernel table
 			_kernelNames = Common::StringArray(sci21_default_knames, kKernelEntriesSci21);
+
+			// Used by script patcher to remove CPU spinning on kGetTime
+			if (g_sci->getGameId() == GID_HOYLE5) {
+				_kernelNames[0x4f] = "Wait";
+			}
 		}
 		break;
 
@@ -943,10 +994,8 @@ void script_adjust_opcode_formats() {
 	}
 
 	if (getSciVersion() >= SCI_VERSION_3) {
-		// TODO: There are also opcodes in
-		// here to get the superclass, and possibly the species too.
-		g_sci->_opcode_formats[0x4d/2][0] = Script_None;
-		g_sci->_opcode_formats[0x4e/2][0] = Script_None;
+		g_sci->_opcode_formats[op_info][0] = Script_None;
+		g_sci->_opcode_formats[op_superP][0] = Script_None;
 	}
 #endif
 }

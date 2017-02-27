@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -268,7 +268,6 @@ static const int MSADPCMAdaptationTable[] = {
 	768, 614, 512, 409, 307, 230, 230, 230
 };
 
-
 int16 MS_ADPCMStream::decodeMS(ADPCMChannelStatus *c, byte code) {
 	int32 predictor;
 
@@ -290,40 +289,43 @@ int16 MS_ADPCMStream::decodeMS(ADPCMChannelStatus *c, byte code) {
 int MS_ADPCMStream::readBuffer(int16 *buffer, const int numSamples) {
 	int samples;
 	byte data;
-	int i = 0;
+	int i;
 
-	samples = 0;
+	for (samples = 0; samples < numSamples && !endOfData(); samples++) {
+		if (_decodedSampleCount == 0) {
+			if (_blockPos[0] == _blockAlign) {
+				// read block header
+				for (i = 0; i < _channels; i++) {
+					_status.ch[i].predictor = CLIP(_stream->readByte(), (byte)0, (byte)6);
+					_status.ch[i].coeff1 = MSADPCMAdaptCoeff1[_status.ch[i].predictor];
+					_status.ch[i].coeff2 = MSADPCMAdaptCoeff2[_status.ch[i].predictor];
+				}
 
-	while (samples < numSamples && !_stream->eos() && _stream->pos() < _endpos) {
-		if (_blockPos[0] == _blockAlign) {
-			// read block header
-			for (i = 0; i < _channels; i++) {
-				_status.ch[i].predictor = CLIP(_stream->readByte(), (byte)0, (byte)6);
-				_status.ch[i].coeff1 = MSADPCMAdaptCoeff1[_status.ch[i].predictor];
-				_status.ch[i].coeff2 = MSADPCMAdaptCoeff2[_status.ch[i].predictor];
+				for (i = 0; i < _channels; i++)
+					_status.ch[i].delta = _stream->readSint16LE();
+
+				for (i = 0; i < _channels; i++)
+					_status.ch[i].sample1 = _stream->readSint16LE();
+
+				for (i = 0; i < _channels; i++)
+					_decodedSamples[_decodedSampleCount++] = _status.ch[i].sample2 = _stream->readSint16LE();
+
+				for (i = 0; i < _channels; i++)
+					_decodedSamples[_decodedSampleCount++] = _status.ch[i].sample1;
+
+				_blockPos[0] = _channels * 7;
+			} else {
+				data = _stream->readByte();
+				_blockPos[0]++;
+				_decodedSamples[_decodedSampleCount++] = decodeMS(&_status.ch[0], (data >> 4) & 0x0f);
+				_decodedSamples[_decodedSampleCount++] = decodeMS(&_status.ch[_channels - 1], data & 0x0f);
 			}
-
-			for (i = 0; i < _channels; i++)
-				_status.ch[i].delta = _stream->readSint16LE();
-
-			for (i = 0; i < _channels; i++)
-				_status.ch[i].sample1 = _stream->readSint16LE();
-
-			for (i = 0; i < _channels; i++)
-				buffer[samples++] = _status.ch[i].sample2 = _stream->readSint16LE();
-
-			for (i = 0; i < _channels; i++)
-				buffer[samples++] = _status.ch[i].sample1;
-
-			_blockPos[0] = _channels * 7;
+			_decodedSampleIndex = 0;
 		}
 
-		for (; samples < numSamples && _blockPos[0] < _blockAlign && !_stream->eos() && _stream->pos() < _endpos; samples += 2) {
-			data = _stream->readByte();
-			_blockPos[0]++;
-			buffer[samples] = decodeMS(&_status.ch[0], (data >> 4) & 0x0f);
-			buffer[samples + 1] = decodeMS(&_status.ch[_channels - 1], data & 0x0f);
-		}
+		// _decodedSamples acts as a FIFO of depth 2 or 4;
+		buffer[samples] = _decodedSamples[_decodedSampleIndex++];
+		_decodedSampleCount--;
 	}
 
 	return samples;
@@ -432,7 +434,7 @@ int16 Ima_ADPCMStream::decodeIMA(byte code, int channel) {
 	return samp;
 }
 
-RewindableAudioStream *makeADPCMStream(Common::SeekableReadStream *stream, DisposeAfterUse::Flag disposeAfterUse, uint32 size, typesADPCM type, int rate, int channels, uint32 blockAlign) {
+SeekableAudioStream *makeADPCMStream(Common::SeekableReadStream *stream, DisposeAfterUse::Flag disposeAfterUse, uint32 size, ADPCMType type, int rate, int channels, uint32 blockAlign) {
 	// If size is 0, report the entire size of the stream
 	if (!size)
 		size = stream->size();
@@ -454,6 +456,36 @@ RewindableAudioStream *makeADPCMStream(Common::SeekableReadStream *stream, Dispo
 		error("Unsupported ADPCM encoding");
 		break;
 	}
+}
+
+class PacketizedADPCMStream : public StatelessPacketizedAudioStream {
+public:
+	PacketizedADPCMStream(ADPCMType type, int rate, int channels, uint32 blockAlign) :
+		StatelessPacketizedAudioStream(rate, channels), _type(type), _blockAlign(blockAlign) {}
+
+protected:
+	AudioStream *makeStream(Common::SeekableReadStream *data);
+
+private:
+	ADPCMType _type;
+	uint32 _blockAlign;
+};
+
+AudioStream *PacketizedADPCMStream::makeStream(Common::SeekableReadStream *data) {
+	return makeADPCMStream(data, DisposeAfterUse::YES, data->size(), _type, getRate(), getChannels(), _blockAlign);
+}
+
+PacketizedAudioStream *makePacketizedADPCMStream(ADPCMType type, int rate, int channels, uint32 blockAlign) {
+	// Filter out types we can't support (they're not fully stateless)
+	switch (type) {
+	case kADPCMOki:
+	case kADPCMDVI:
+		return 0;
+	default:
+		break;
+	}
+
+	return new PacketizedADPCMStream(type, rate, channels, blockAlign);
 }
 
 } // End of namespace Audio

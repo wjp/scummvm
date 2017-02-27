@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -32,6 +32,9 @@
 #include "common/keyboard.h"
 #include "common/textconsole.h"
 
+#include "audio/audiostream.h"
+#include "audio/mixer.h"
+
 #include "engines/util.h"
 #include "graphics/cursorman.h"
 #include "graphics/palette.h"
@@ -44,10 +47,32 @@
 namespace Touche {
 
 ToucheEngine::ToucheEngine(OSystem *system, Common::Language language)
-	: Engine(system), _midiPlayer(0), _language(language), _rnd("touche") {
+	: Engine(system), _midiPlayer(nullptr), _language(language), _rnd("touche") {
 	_saveLoadCurrentPage = 0;
 	_saveLoadCurrentSlot = 0;
 	_hideInventoryTexts = false;
+
+	_numOpcodes = 0;
+	_compressedSpeechData = 0;
+	_textData = nullptr;
+	_backdropBuffer = nullptr;
+	_menuKitData = nullptr;
+	_convKitData = nullptr;
+
+	for (int i = 0; i < NUM_SEQUENCES; i++)
+		_sequenceDataTable[i] = nullptr;
+
+	_programData = nullptr;
+	_programDataSize = 0;
+	_mouseData = nullptr;
+	_iconData = nullptr;
+	_currentBitmapWidth = 0;
+	_currentBitmapHeight = 0;
+	_currentImageWidth = 0;
+	_currentImageHeight = 0;
+	_roomWidth = 0;
+	_programTextDataPtr = nullptr;
+	_offscreenBuffer = nullptr;
 
 	_screenRect = Common::Rect(kScreenWidth, kScreenHeight);
 	_roomAreaRect = Common::Rect(kScreenWidth, kRoomHeight);
@@ -57,6 +82,8 @@ ToucheEngine::ToucheEngine(OSystem *system, Common::Language language)
 	clearDirtyRects();
 
 	_playSoundCounter = 0;
+
+	_musicVolume = 0;
 
 	_processRandomPaletteCounter = 0;
 
@@ -84,12 +111,90 @@ ToucheEngine::ToucheEngine(OSystem *system, Common::Language language)
 	DebugMan.addDebugChannel(kDebugCharset,  "Charset",   "Charset debug level");
 
 	_console = new ToucheConsole(this);
+
+	_newEpisodeNum = 0;
+	_currentEpisodeNum = 0;
+	_currentAmountOfMoney = 0;
+	_giveItemToKeyCharNum = 0;
+	_giveItemToObjectNum = 0;
+	_giveItemToCounter = 0;
+	_currentRoomNum = 0;
+	_waitingSetKeyCharNum1 = 0;
+	_waitingSetKeyCharNum2 = 0;
+	_waitingSetKeyCharNum3 = 0;
+	_script.opcodeNum = 0;
+	_script.dataOffset = 0;
+	_script.keyCharNum = 0;
+	_script.dataPtr = nullptr;
+	_script.stackDataPtr = nullptr;
+	_script.stackDataBasePtr = nullptr;
+	_script.quitFlag = 0;
+	_opcodesTable = nullptr;
+
+	for (uint i = 0; i < NUM_SPRITES; i++)
+		memset(&_spritesTable[i], 0, sizeof(SpriteData));
+
+	for (uint i = 0; i < NUM_SEQUENCES; i++)
+		memset(&_sequenceEntryTable[i], 0, sizeof(SequenceEntry));
+
+	_talkListEnd = 0;
+	_talkListCurrent = 0;
+	_talkTextRectDefined = false;
+	_talkTextDisplayed = false;
+	_talkTextInitialized = false;
+	_skipTalkText = false;
+	_talkTextSpeed = 0;
+	_keyCharTalkCounter = 0;
+	_talkTableLastTalkingKeyChar = 0;
+	_talkTableLastOtherKeyChar = 0;
+	_talkTableLastStringNum = 0;
+
+	for (uint i = 0; i < NUM_TALK_ENTRIES; i++)
+		memset(&_talkTable[i], 0, sizeof(TalkEntry));
+
+	_conversationChoicesUpdated = false;
+	_conversationReplyNum = 0;
+	_conversationEnded = false;
+	_conversationNum = 0;
+	_scrollConversationChoiceOffset = 0;
+	_currentConversation = 0;
+	_disableConversationScript = false;
+	_conversationAreaCleared = false;
+
+	for (uint i = 0; i < NUM_CONVERSATION_CHOICES; i++)
+		memset(&_conversationChoicesTable[i], 0, sizeof(ConversationChoice));
+
+	for (uint i = 0; i < NUM_KEYCHARS; i++)
+		_sortedKeyCharsTable[i] = 0;
+
+	_currentKeyCharNum = 0;
+	_inp_leftMouseButtonPressed = false;
+	_inp_rightMouseButtonPressed = false;
+	_disabledInputCounter = 0;
+	_gameState = kGameStateNone;
+	_displayQuitDialog = false;
+	_newMusicNum = 0;
+	_currentMusicNum = 0;
+	_newSoundNum = 0;
+	_newSoundDelay = 0;
+	_newSoundPriority = 0;
+	for (int i = 0; i < 3; ++i) {
+		_inventoryStateTable[i].displayOffset = 0;
+		_inventoryStateTable[i].lastItem = 0;
+		_inventoryStateTable[i].itemsPerLine = 0;
+		_inventoryStateTable[i].itemsList = nullptr;
+	}
+	_inventoryVar1 = nullptr;
+	_inventoryVar2 = nullptr;
+	_currentCursorObject = 0;
+	_talkTextMode = 0;
 }
 
 ToucheEngine::~ToucheEngine() {
 	DebugMan.clearAllDebugChannels();
 	delete _console;
 
+	stopMusic();
 	delete _midiPlayer;
 }
 
@@ -100,7 +205,7 @@ Common::Error ToucheEngine::run() {
 
 	setupOpcodes();
 
-	_midiPlayer = new MidiPlayer;
+	initMusic();
 
 	// Setup mixer
 	syncSoundSettings();
@@ -120,7 +225,7 @@ Common::Error ToucheEngine::run() {
 }
 
 void ToucheEngine::restart() {
-	_midiPlayer->stop();
+	stopMusic();
 
 	_gameState = kGameStateGameLoop;
 	_displayQuitDialog = false;
@@ -216,7 +321,7 @@ void ToucheEngine::readConfigurationSettings() {
 			_talkTextMode = kTalkModeVoiceOnly;
 		}
 	}
-	_midiPlayer->setVolume(ConfMan.getInt("music_volume"));
+	setMusicVolume(ConfMan.getInt("music_volume"));
 }
 
 void ToucheEngine::writeConfigurationSettings() {
@@ -234,7 +339,7 @@ void ToucheEngine::writeConfigurationSettings() {
 		ConfMan.setBool("subtitles", true);
 		break;
 	}
-	ConfMan.setInt("music_volume", _midiPlayer->getVolume());
+	ConfMan.setInt("music_volume", getMusicVolume());
 	ConfMan.flushToDisk();
 }
 
@@ -332,13 +437,13 @@ void ToucheEngine::processEvents(bool handleKeyEvents) {
 					this->getDebugger()->onFrame();
 				}
 			} else {
-				if (event.kbd.ascii == 't') {
+				if (event.kbd.keycode == Common::KEYCODE_t) {
 					++_talkTextMode;
 					if (_talkTextMode == kTalkModeCount) {
 						_talkTextMode = 0;
 					}
 					displayTextMode(-(92 + _talkTextMode));
-				} else if (event.kbd.ascii == ' ') {
+				} else if (event.kbd.keycode == Common::KEYCODE_SPACE) {
 					updateKeyCharTalk(2);
 				}
 			}
@@ -3010,12 +3115,12 @@ void ToucheEngine::buildWalkPath(int dstPosX, int dstPosY, int keyChar) {
 	for (uint i = 0; i < _programWalkTable.size(); ++i) {
 		const ProgramWalkData *pwd = &_programWalkTable[i];
 		if ((pwd->point1 & 0x4000) == 0) {
-			int distance = 32000;
 			ProgramPointData *pts1 = &_programPointsTable[pwd->point1];
 			ProgramPointData *pts2 = &_programPointsTable[pwd->point2];
 			if (pts1->order != 0) {
 				int dx = pts2->x - pts1->x;
 				int dy = pts2->y - pts1->y;
+				int distance = 32000;
 				if (dx == 0) {
 					if (dstPosY > MIN(pts2->y, pts1->y) && dstPosY < MAX(pts2->y, pts1->y)) {
 						int d = ABS(dstPosX - pts1->x);
@@ -3305,6 +3410,82 @@ bool ToucheEngine::canLoadGameStateCurrently() {
 
 bool ToucheEngine::canSaveGameStateCurrently() {
 	return _gameState == kGameStateGameLoop && _flagsTable[618] == 0 && !_hideInventoryTexts;
+}
+
+void ToucheEngine::initMusic() {
+	// Detect External Music Files
+	bool extMusic = true;
+	for (int num = 0; num < 26 && extMusic; num++) {
+		Common::String extMusicFilename = Common::String::format("track%02d", num+1);
+		Audio::SeekableAudioStream *musicStream = Audio::SeekableAudioStream::openStreamFile(extMusicFilename);
+		if (!musicStream)
+			extMusic = false;
+		delete musicStream;
+	}
+
+	if (!extMusic) {
+		_midiPlayer = new MidiPlayer;
+		debug(1, "initMusic(): Using midi music!");
+	} else
+		debug(1, "initMusic(): Using external digital music!");
+}
+
+void ToucheEngine::startMusic(int num) {
+	debug(1, "startMusic(%d)", num);
+	uint32 size;
+
+	stopMusic();
+
+	if (_midiPlayer) {
+		const uint32 offs = res_getDataOffset(kResourceTypeMusic, num, &size);
+		_fData.seek(offs);
+		_midiPlayer->play(_fData, size, true);
+	} else {
+		Common::String extMusicFilename = Common::String::format("track%02d", num);
+		Audio::SeekableAudioStream *extMusicFileStream = Audio::SeekableAudioStream::openStreamFile(extMusicFilename);
+		if (!extMusicFileStream) {
+			error("Unable to open %s for reading", extMusicFilename.c_str());
+		}
+		Audio::LoopingAudioStream *loopStream = new Audio::LoopingAudioStream(extMusicFileStream, 0);
+		_mixer->playStream(Audio::Mixer::kMusicSoundType, &_musicHandle, loopStream, -1, _musicVolume);
+	}
+}
+
+void ToucheEngine::stopMusic() {
+	debug(1, "stopMusic()");
+	if (_midiPlayer)
+		_midiPlayer->stop();
+	else {
+		_mixer->stopHandle(_musicHandle);
+	}
+}
+
+int ToucheEngine::getMusicVolume() {
+	if (_midiPlayer)
+		_musicVolume = _midiPlayer->getVolume();
+	return _musicVolume;
+}
+
+void ToucheEngine::setMusicVolume(int volume) {
+	debug(1, "setMusicVolume(%d)", volume);
+	_musicVolume = CLIP(volume, 0, 255);
+
+	if (_midiPlayer)
+		_midiPlayer->setVolume(_musicVolume);
+	else {
+		_mixer->setChannelVolume(_musicHandle, _musicVolume);
+	}
+}
+
+void ToucheEngine::adjustMusicVolume(int diff) {
+	debug(1, "adjustMusicVolume(%d)", diff);
+	_musicVolume = CLIP(_musicVolume + diff, 0, 255);
+
+	if (_midiPlayer)
+		_midiPlayer->adjustVolume(diff);
+	else {
+		_mixer->setChannelVolume(_musicHandle, _musicVolume);
+	}
 }
 
 } // namespace Touche

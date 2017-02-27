@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -32,6 +32,7 @@ struct MessageRecord {
 	MessageTuple tuple;
 	MessageTuple refTuple;
 	const char *string;
+	uint32 length;
 	byte talker;
 };
 
@@ -56,7 +57,7 @@ public:
 
 protected:
 	MessageReader(const byte *data, uint size, uint headerSize, uint recordSize)
-		: _data(data), _size(size), _headerSize(headerSize), _recordSize(recordSize) { }
+		: _data(data), _size(size), _headerSize(headerSize), _recordSize(recordSize), _messageCount(0) { }
 
 	const byte *_data;
 	const uint _size;
@@ -77,7 +78,13 @@ public:
 				record.tuple = tuple;
 				record.refTuple = MessageTuple();
 				record.talker = 0;
-				record.string = (const char *)_data + READ_LE_UINT16(recordPtr + 2);
+				const uint16 stringOffset = READ_LE_UINT16(recordPtr + 2);
+				const uint32 maxSize = _size - stringOffset;
+				record.string = (const char *)_data + stringOffset;
+				record.length = Common::strnlen(record.string, maxSize);
+				if (record.length == maxSize) {
+					warning("Message %s appears truncated at %ld", tuple.toString().c_str(), recordPtr - _data);
+				}
 				return true;
 			}
 			recordPtr += _recordSize;
@@ -100,7 +107,13 @@ public:
 				record.tuple = tuple;
 				record.refTuple = MessageTuple();
 				record.talker = recordPtr[4];
-				record.string = (const char *)_data + READ_LE_UINT16(recordPtr + 5);
+				const uint16 stringOffset = READ_LE_UINT16(recordPtr + 5);
+				const uint32 maxSize = _size - stringOffset;
+				record.string = (const char *)_data + stringOffset;
+				record.length = Common::strnlen(record.string, maxSize);
+				if (record.length == maxSize) {
+					warning("Message %s appears truncated at %ld", tuple.toString().c_str(), recordPtr - _data);
+				}
 				return true;
 			}
 			recordPtr += _recordSize;
@@ -123,7 +136,13 @@ public:
 				record.tuple = tuple;
 				record.refTuple = MessageTuple(recordPtr[7], recordPtr[8], recordPtr[9]);
 				record.talker = recordPtr[4];
-				record.string = (const char *)_data + READ_SCI11ENDIAN_UINT16(recordPtr + 5);
+				const uint16 stringOffset = READ_SCI11ENDIAN_UINT16(recordPtr + 5);
+				const uint32 maxSize = _size - stringOffset;
+				record.string = (const char *)_data + stringOffset;
+				record.length = Common::strnlen(record.string, maxSize);
+				if (record.length == maxSize) {
+					warning("Message %s appears truncated at %ld", tuple.toString().c_str(), recordPtr - _data);
+				}
 				return true;
 			}
 			recordPtr += _recordSize;
@@ -149,7 +168,13 @@ public:
 				record.tuple = tuple;
 				record.refTuple = MessageTuple(recordPtr[8], recordPtr[9], recordPtr[10]);
 				record.talker = recordPtr[4];
-				record.string = (const char *)_data + READ_BE_UINT16(recordPtr + 6);
+				const uint16 stringOffset = READ_BE_UINT16(recordPtr + 6);
+				const uint32 maxSize = _size - stringOffset;
+				record.string = (const char *)_data + stringOffset;
+				record.length = Common::strnlen(record.string, maxSize);
+				if (record.length == maxSize) {
+					warning("Message %s appears truncated at %ld", tuple.toString().c_str(), recordPtr - _data);
+				}
 				return true;
 			}
 			recordPtr += _recordSize;
@@ -161,7 +186,7 @@ public:
 #endif
 
 bool MessageState::getRecord(CursorStack &stack, bool recurse, MessageRecord &record) {
-	Resource *res = g_sci->getResMan()->findResource(ResourceId(kResourceTypeMessage, stack.getModule()), 0);
+	Resource *res = g_sci->getResMan()->findResource(ResourceId(kResourceTypeMessage, stack.getModule()), false);
 
 	if (!res) {
 		warning("Failed to open message resource %d", stack.getModule());
@@ -182,7 +207,7 @@ bool MessageState::getRecord(CursorStack &stack, bool recurse, MessageRecord &re
 #ifdef ENABLE_SCI32
 	case 5: // v5 seems to be compatible with v4
 		// SCI32 Mac is different than SCI32 DOS/Win here
-		if (g_sci->getPlatform() == Common::kPlatformMacintosh && getSciVersion() >= SCI_VERSION_2_1)
+		if (g_sci->getPlatform() == Common::kPlatformMacintosh && getSciVersion() >= SCI_VERSION_2_1_EARLY)
 			reader = new MessageReaderV4_MacSCI32(res->data, res->size);
 		else
 #endif
@@ -202,6 +227,46 @@ bool MessageState::getRecord(CursorStack &stack, bool recurse, MessageRecord &re
 
 	while (1) {
 		MessageTuple &t = stack.top();
+
+		// Fix known incorrect message tuples
+		if (g_sci->getGameId() == GID_QFG1VGA && stack.getModule() == 322 &&
+			t.noun == 14 && t.verb == 1 && t.cond == 19 && t.seq == 1) {
+			// Talking to Kaspar the shopkeeper - bug #3604944
+			t.verb = 2;
+		}
+
+		if (g_sci->getGameId() == GID_PQ1 && stack.getModule() == 38 &&
+			t.noun == 10 && t.verb == 4 && t.cond == 8 && t.seq == 1) {
+			// Using the hand icon on Keith in the Blue Room - bug #3605654
+			t.cond = 9;
+		}
+
+		if (g_sci->getGameId() == GID_PQ1 && stack.getModule() == 38 &&
+			t.noun == 10 && t.verb == 1 && t.cond == 0 && t.seq == 1) {
+			// Using the eye icon on Keith in the Blue Room - bug #3605654
+			t.cond = 13;
+		}
+
+		// Fill in known missing message tuples
+		if (g_sci->getGameId() == GID_SQ4 && stack.getModule() == 16 &&
+			t.noun == 7 && t.verb == 0 && t.cond == 3 && t.seq == 1) {
+			// This fixes the error message shown when speech and subtitles are
+			// enabled simultaneously in SQ4 - the (very) long dialog when Roger
+			// is talking with the aliens is missing - bug #3538416.
+			record.tuple = t;
+			record.refTuple = MessageTuple();
+			record.talker = 7;	// Roger
+			// The missing text is just too big to fit in one speech bubble, and
+			// if it's added here manually and drawn on screen, it's painted over
+			// the entrance in the back where the Sequel Police enters, so it
+			// looks very ugly. Perhaps this is why this particular text is missing,
+			// as the text shown in this screen is very short (one-liners).
+			// Just output an empty string here instead of showing an error.
+			record.string = "";
+			record.length = 0;
+			delete reader;
+			return true;
+		}
 
 		if (!reader->findRecord(t, record)) {
 			// Tuple not found
@@ -246,7 +311,7 @@ int MessageState::nextMessage(reg_t buf) {
 			return record.talker;
 		} else {
 			MessageTuple &t = _cursorStack.top();
-			outputString(buf, Common::String::format("Msg %d: %d %d %d %d not found", _cursorStack.getModule(), t.noun, t.verb, t.cond, t.seq));
+			outputString(buf, Common::String::format("Msg %d: %s not found", _cursorStack.getModule(), t.toString().c_str()));
 			return 0;
 		}
 	} else {
@@ -265,7 +330,7 @@ int MessageState::messageSize(int module, MessageTuple &t) {
 
 	stack.init(module, t);
 	if (getRecord(stack, true, record))
-		return strlen(record.string) + 1;
+		return record.length + 1;
 	else
 		return 0;
 }
@@ -294,12 +359,14 @@ void MessageState::popCursorStack() {
 		error("Message: attempt to pop from empty stack");
 }
 
-int MessageState::hexDigitToInt(char h) {
+int MessageState::hexDigitToWrongInt(char h) {
+	// Hex digits above 9 are incorrectly interpreted by SSCI as 11-16 instead
+	// of 10-15 because of a never-fixed typo
 	if ((h >= 'A') && (h <= 'F'))
-		return h - 'A' + 10;
+		return h - 'A' + 11;
 
 	if ((h >= 'a') && (h <= 'f'))
-		return h - 'a' + 10;
+		return h - 'a' + 11;
 
 	if ((h >= '0') && (h <= '9'))
 		return h - '0';
@@ -316,8 +383,8 @@ bool MessageState::stringHex(Common::String &outStr, const Common::String &inStr
 	if (index + 2 >= inStr.size())
 		return false;
 
-	int digit1 = hexDigitToInt(inStr[index + 1]);
-	int digit2 = hexDigitToInt(inStr[index + 2]);
+	int digit1 = hexDigitToWrongInt(inStr[index + 1]);
+	int digit2 = hexDigitToWrongInt(inStr[index + 2]);
 
 	// Check for hex
 	if ((digit1 == -1) || (digit2 == -1))
@@ -400,21 +467,8 @@ Common::String MessageState::processString(const char *s) {
 void MessageState::outputString(reg_t buf, const Common::String &str) {
 #ifdef ENABLE_SCI32
 	if (getSciVersion() >= SCI_VERSION_2) {
-		if (_segMan->getSegmentType(buf.getSegment()) == SEG_TYPE_STRING) {
-			SciString *sciString = _segMan->lookupString(buf);
-			sciString->setSize(str.size() + 1);
-			for (uint32 i = 0; i < str.size(); i++)
-				sciString->setValue(i, str.c_str()[i]);
-			sciString->setValue(str.size(), 0);
-		} else if (_segMan->getSegmentType(buf.getSegment()) == SEG_TYPE_ARRAY) {
-			// Happens in the intro of LSL6, we are asked to write the string
-			// into an array
-			SciArray<reg_t> *sciString = _segMan->lookupArray(buf);
-			sciString->setSize(str.size() + 1);
-			for (uint32 i = 0; i < str.size(); i++)
-				sciString->setValue(i, make_reg(0, str.c_str()[i]));
-			sciString->setValue(str.size(), NULL_REG);
-		}
+		SciArray *sciString = _segMan->lookupArray(buf);
+		sciString->fromString(str);
 	} else {
 #endif
 		SegmentRef buffer_r = _segMan->dereference(buf);

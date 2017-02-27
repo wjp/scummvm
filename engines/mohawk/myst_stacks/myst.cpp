@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -33,8 +33,6 @@
 #include "common/system.h"
 #include "common/textconsole.h"
 
-#include "gui/message.h"
-
 namespace Mohawk {
 namespace MystStacks {
 
@@ -50,14 +48,16 @@ Myst::Myst(MohawkEngine_Myst *vm) :
 	_libraryBookcaseChanged = false;
 	_dockVaultState = 0;
 	_cabinDoorOpened = 0;
+	_cabinHandleDown = 0;
 	_cabinMatchState = 2;
+	_cabinGaugeMovieEnabled = false;
 	_matchBurning = false;
-	_tree = 0;
-	_treeAlcove = 0;
+	_tree = nullptr;
+	_treeAlcove = nullptr;
 	_treeStopped = false;
 	_treeMinPosition = 0;
 	_imagerValidationStep = 0;
-	_observatoryCurrentSlider = 0;
+	_observatoryCurrentSlider = nullptr;
 	_butterfliesMoviePlayed = false;
 	_state.treeLastMoveTime = _vm->_system->getMillis();
 }
@@ -189,7 +189,7 @@ void Myst::setupOpcodes() {
 	OPCODE(215, o_gulls2_init);
 	OPCODE(216, o_treeCard_init);
 	OPCODE(217, o_treeEntry_init);
-	OPCODE(218, opcode_218);
+	OPCODE(218, o_boilerMovies_init);
 	OPCODE(219, o_rocketSliders_init);
 	OPCODE(220, o_rocketLinkVideo_init);
 	OPCODE(221, o_greenBook_init);
@@ -202,7 +202,7 @@ void Myst::setupOpcodes() {
 	OPCODE(303, NOP);
 	OPCODE(304, o_treeCard_exit);
 	OPCODE(305, o_treeEntry_exit);
-	OPCODE(306, NOP);
+	OPCODE(306, o_boiler_exit);
 	OPCODE(307, o_generatorControlRoom_exit);
 	OPCODE(308, NOP);
 	OPCODE(309, NOP);
@@ -608,6 +608,8 @@ uint16 Myst::getVar(uint16 var) {
 		return 1;
 	case 302: // Green Book Opened Before Flag
 		return _state.greenBookOpenedBefore;
+	case 303: // Library Bookcase status changed
+		return _libraryBookcaseChanged;
 	case 304: // Tower Rotation Map Initialized
 		return _towerRotationMapInitialized;
 	case 305: // Cabin Boiler Lit
@@ -624,7 +626,7 @@ uint16 Myst::getVar(uint16 var) {
 	case 307: // Cabin Boiler Fully Pressurized
 		return _state.cabinPilotLightLit == 1 && _state.cabinValvePosition > 12;
 	case 308: // Cabin handle position
-		return 0; // Not implemented in the original
+		return _cabinHandleDown;
 	default:
 		return MystScriptParser::getVar(var);
 	}
@@ -687,6 +689,7 @@ void Myst::toggleVar(uint16 var) {
 			else
 				_state.courtyardImageBoxes |= mask;
 		}
+		break;
 	case 41: // Vault white page
 		if (_globals.ending != 4) {
 			if (_dockVaultState == 1) {
@@ -760,6 +763,9 @@ bool Myst::setVarValue(uint16 var, uint16 value) {
 		break;
 	case 304: // Myst Library Image Present on Tower Rotation Map
 		_towerRotationMapInitialized = value;
+		break;
+	case 308: // Cabin handle position
+		_cabinHandleDown = value;
 		break;
 	case 309: // Tree stopped
 		_treeStopped = value;
@@ -857,14 +863,14 @@ void Myst::o_fireplaceToggleButton(uint16 op, uint16 var, uint16 argc, uint16 *a
 	if (line & bitmask) {
 		// Unset button
 		for (uint i = 4795; i >= 4779; i--) {
-			_vm->_gfx->copyImageToScreen(i, _invokingResource->getRect());
+			_vm->_gfx->copyImageToScreen(i, getInvokingResource<MystArea>()->getRect());
 			_vm->_system->updateScreen();
 		}
 		_fireplaceLines[var - 17] &= ~bitmask;
 	} else {
 		// Set button
 		for (uint i = 4779; i <= 4795; i++) {
-			_vm->_gfx->copyImageToScreen(i, _invokingResource->getRect());
+			_vm->_gfx->copyImageToScreen(i, getInvokingResource<MystArea>()->getRect());
 			_vm->_system->updateScreen();
 		}
 		_fireplaceLines[var - 17] |= bitmask;
@@ -1041,7 +1047,7 @@ void Myst::o_bookGivePage(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 
 	// No page or white page
 	if (!_globals.heldPage || _globals.heldPage == 13) {
-		_vm->changeToCard(cardIdBookCover, true);
+		_vm->changeToCard(cardIdBookCover, kTransitionDissolve);
 		return;
 	}
 
@@ -1083,7 +1089,7 @@ void Myst::o_bookGivePage(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 
 	// Wrong book
 	if (bookVar != var) {
-		_vm->changeToCard(cardIdBookCover, true);
+		_vm->changeToCard(cardIdBookCover, kTransitionDissolve);
 		return;
 	}
 
@@ -1109,9 +1115,9 @@ void Myst::o_bookGivePage(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 		else
 			_globals.currentAge = 10;
 
-		_vm->changeToCard(cardIdLose, true);
+		_vm->changeToCard(cardIdLose, kTransitionDissolve);
 	} else {
-		_vm->changeToCard(cardIdBookCover, true);
+		_vm->changeToCard(cardIdBookCover, kTransitionDissolve);
 	}
 }
 
@@ -1130,10 +1136,13 @@ void Myst::o_clockWheelsExecute(uint16 op, uint16 var, uint16 argc, uint16 *argv
 		_vm->_system->delayMillis(500);
 
 		// Gears rise up
-		VideoHandle gears = _vm->_video->playMovie(_vm->wrapMovieFilename("gears", kMystStack), 305, 33);
-		_vm->_video->setVideoBounds(gears, Audio::Timestamp(0, 0, 600), Audio::Timestamp(0, 650, 600));
-		_vm->_video->waitUntilMovieEnds(gears);
+		VideoHandle gears = _vm->_video->playMovie(_vm->wrapMovieFilename("gears", kMystStack));
+		if (!gears)
+			error("Failed to open gears movie");
 
+		gears->moveTo(305, 33);
+		gears->setBounds(Audio::Timestamp(0, 0, 600), Audio::Timestamp(0, 650, 600));
+		_vm->_video->waitUntilMovieEnds(gears);
 
 		_state.clockTowerBridgeOpen = 1;
 		_vm->redrawArea(12);
@@ -1142,8 +1151,12 @@ void Myst::o_clockWheelsExecute(uint16 op, uint16 var, uint16 argc, uint16 *argv
 		_vm->_system->delayMillis(500);
 
 		// Gears sink down
-		VideoHandle gears = _vm->_video->playMovie(_vm->wrapMovieFilename("gears", kMystStack), 305, 33);
-		_vm->_video->setVideoBounds(gears, Audio::Timestamp(0, 700, 600), Audio::Timestamp(0, 1300, 600));
+		VideoHandle gears = _vm->_video->playMovie(_vm->wrapMovieFilename("gears", kMystStack));
+		if (!gears)
+			error("Failed to open gears movie");
+
+		gears->moveTo(305, 33);
+		gears->setBounds(Audio::Timestamp(0, 700, 600), Audio::Timestamp(0, 1300, 600));
 		_vm->_video->waitUntilMovieEnds(gears);
 
 		_state.clockTowerBridgeOpen = 0;
@@ -1186,15 +1199,23 @@ void Myst::o_imagerPlayButton(uint16 op, uint16 var, uint16 argc, uint16 *argv) 
 		if (_state.imagerActive) {
 			// Mountains disappearing
 			Common::String file = _vm->wrapMovieFilename("vltmntn", kMystStack);
-			VideoHandle mountain = _vm->_video->playMovie(file, 159, 96, false);
-			_vm->_video->setVideoBounds(mountain, Audio::Timestamp(0, 11180, 600), Audio::Timestamp(0, 16800, 600));
+			VideoHandle mountain = _vm->_video->playMovie(file);
+			if (!mountain)
+				error("Failed to open '%s'", file.c_str());
+
+			mountain->moveTo(159, 96);
+			mountain->setBounds(Audio::Timestamp(0, 11180, 600), Audio::Timestamp(0, 16800, 600));
 
 			_state.imagerActive = 0;
 		} else {
 			// Mountains appearing
 			Common::String file = _vm->wrapMovieFilename("vltmntn", kMystStack);
-			VideoHandle mountain = _vm->_video->playMovie(file, 159, 96, false);
-			_vm->_video->setVideoBounds(mountain, Audio::Timestamp(0, 0, 600), Audio::Timestamp(0, 11180, 600));
+			VideoHandle mountain = _vm->_video->playMovie(file);
+			if (!mountain)
+				error("Failed to open '%s'", file.c_str());
+
+			mountain->moveTo(159, 96);
+			mountain->setBounds(Audio::Timestamp(0, 0, 600), Audio::Timestamp(0, 11180, 600));
 
 			_state.imagerActive = 1;
 		}
@@ -1207,20 +1228,20 @@ void Myst::o_imagerPlayButton(uint16 op, uint16 var, uint16 argc, uint16 *argv) 
 
 			// Water disappearing
 			VideoHandle water = _imagerMovie->playMovie();
-			_vm->_video->setVideoBounds(water, Audio::Timestamp(0, 4204, 600), Audio::Timestamp(0, 6040, 600));
-			_vm->_video->setVideoLooping(water, false);
+			water->setBounds(Audio::Timestamp(0, 4204, 600), Audio::Timestamp(0, 6040, 600));
+			water->setLooping(false);
 
 			_state.imagerActive = 0;
 		} else {
 			// Water appearing
 			VideoHandle water = _imagerMovie->playMovie();
-			_vm->_video->setVideoBounds(water, Audio::Timestamp(0, 0, 600), Audio::Timestamp(0, 1814, 600));
+			water->setBounds(Audio::Timestamp(0, 0, 600), Audio::Timestamp(0, 1814, 600));
 			_vm->_video->waitUntilMovieEnds(water);
 
 			// Water looping
 			water = _imagerMovie->playMovie();
-			_vm->_video->setVideoBounds(water, Audio::Timestamp(0, 1814, 600), Audio::Timestamp(0, 4204, 600));
-			_vm->_video->setVideoLooping(water, true);
+			water->setBounds(Audio::Timestamp(0, 1814, 600), Audio::Timestamp(0, 4204, 600));
+			water->setLooping(true);
 
 			_state.imagerActive = 1;
 		}
@@ -1233,7 +1254,7 @@ void Myst::o_imagerPlayButton(uint16 op, uint16 var, uint16 argc, uint16 *argv) 
 void Myst::o_imagerEraseButton(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Imager erase button", op);
 
-	_imagerRedButton = static_cast<MystResourceType8 *>(_invokingResource->_parent);
+	_imagerRedButton = static_cast<MystAreaImageSwitch *>(getInvokingResource<MystArea>()->_parent);
 	for (uint i = 0; i < 4; i++)
 		_imagerSound[i] = argv[i];
 	_imagerValidationCard = argv[4];
@@ -1298,7 +1319,7 @@ void Myst::imagerValidation_run() {
 
 		if (_imagerValidationStep == 11) {
 			_imagerValidationStep = 0;
-			_vm->changeToCard(_imagerValidationCard, true);
+			_vm->changeToCard(_imagerValidationCard, kTransitionBottomToTop);
 		} else {
 			_startTime = time + 100;
 		}
@@ -1333,7 +1354,7 @@ void Myst::o_towerElevatorAnimation(uint16 op, uint16 var, uint16 argc, uint16 *
 void Myst::o_generatorButtonPressed(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Generator button pressed", op);
 
-	MystResource *button = _invokingResource->_parent;
+	MystArea *button = getInvokingResource<MystArea>()->_parent;
 
 	generatorRedrawRocket();
 
@@ -1358,7 +1379,7 @@ void Myst::o_generatorButtonPressed(uint16 op, uint16 var, uint16 argc, uint16 *
 		if (_generatorVoltage)
 			_vm->_sound->replaceSoundMyst(6297);
 		else {
-			_vm->_sound->replaceSoundMyst(7297); // TODO: Replace with play sound and replace background 4297
+			_vm->_sound->replaceSoundMyst(7297);
 			_vm->_sound->replaceBackgroundMyst(4297);
 		}
 
@@ -1367,7 +1388,7 @@ void Myst::o_generatorButtonPressed(uint16 op, uint16 var, uint16 argc, uint16 *
 	}
 
 	// Redraw button
-	_vm->redrawArea(button->getType8Var());
+	_vm->redrawArea(button->getImageSwitchVar());
 
 	// Blow breaker
 	if (_state.generatorVoltage > 59)
@@ -1380,8 +1401,8 @@ void Myst::generatorRedrawRocket() {
 	_vm->redrawArea(97);
 }
 
-void Myst::generatorButtonValue(MystResource *button, uint16 &mask, uint16 &value) {
-	switch (button->getType8Var()) {
+void Myst::generatorButtonValue(MystArea *button, uint16 &mask, uint16 &value) {
+	switch (button->getImageSwitchVar()) {
 	case 52: // Generator Switch #1
 		mask = 1;
 		value = 10;
@@ -1448,7 +1469,7 @@ void Myst::o_cabinSafeHandleStartMove(uint16 op, uint16 var, uint16 argc, uint16
 	debugC(kDebugScript, "Opcode %d: Cabin safe handle start move", op);
 
 	// Used on Card 4100
-	MystResourceType12 *handle = static_cast<MystResourceType12 *>(_invokingResource);
+	MystVideoInfo *handle = getInvokingResource<MystVideoInfo>();
 	handle->drawFrame(0);
 	_vm->_cursor->setCursor(700);
 	_tempVar = 0;
@@ -1458,7 +1479,7 @@ void Myst::o_cabinSafeHandleMove(uint16 op, uint16 var, uint16 argc, uint16 *arg
 	debugC(kDebugScript, "Opcode %d: Cabin safe handle move", op);
 
 	// Used on Card 4100
-	MystResourceType12 *handle = static_cast<MystResourceType12 *>(_invokingResource);
+	MystVideoInfo *handle = getInvokingResource<MystVideoInfo>();
 
 	if (handle->pullLeverV()) {
 		// Sound not played yet
@@ -1473,10 +1494,10 @@ void Myst::o_cabinSafeHandleMove(uint16 op, uint16 var, uint16 argc, uint16 *arg
 			if (soundId)
 				_vm->_sound->replaceSoundMyst(soundId);
 
-			_vm->changeToCard(4103, false);
+			_vm->changeToCard(4103, kNoTransition);
 
 			Common::Rect screenRect = Common::Rect(544, 333);
-			_vm->_gfx->runTransition(0, screenRect, 2, 5);
+			_vm->_gfx->runTransition(kTransitionLeftToRight, screenRect, 2, 5);
 		}
 		_tempVar = 1;
 	} else {
@@ -1488,7 +1509,7 @@ void Myst::o_cabinSafeHandleEndMove(uint16 op, uint16 var, uint16 argc, uint16 *
 	debugC(kDebugScript, "Opcode %d: Cabin safe handle end move", op);
 
 	// Used on Card 4100
-	MystResourceType12 *handle = static_cast<MystResourceType12 *>(_invokingResource);
+	MystVideoInfo *handle = getInvokingResource<MystVideoInfo>();
 	handle->drawFrame(0);
 	_vm->checkCursorHints();
 }
@@ -1786,7 +1807,7 @@ void Myst::o_observatoryTimeSliderMove(uint16 op, uint16 var, uint16 argc, uint1
 void Myst::o_circuitBreakerStartMove(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Circuit breaker start move", op);
 
-	MystResourceType12 *breaker = static_cast<MystResourceType12 *>(_invokingResource);
+	MystVideoInfo *breaker = getInvokingResource<MystVideoInfo>();
 	breaker->drawFrame(0);
 	_vm->_cursor->setCursor(700);
 	_tempVar = 0;
@@ -1795,7 +1816,7 @@ void Myst::o_circuitBreakerStartMove(uint16 op, uint16 var, uint16 argc, uint16 
 void Myst::o_circuitBreakerMove(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Circuit breaker move", op);
 
-	MystResourceType12 *breaker = static_cast<MystResourceType12 *>(_invokingResource);
+	MystVideoInfo *breaker = getInvokingResource<MystVideoInfo>();
 	const Common::Point &mouse = _vm->_system->getEventManager()->getMousePos();
 
 	int16 maxStep = breaker->getStepsV() - 1;
@@ -1810,7 +1831,7 @@ void Myst::o_circuitBreakerMove(uint16 op, uint16 var, uint16 argc, uint16 *argv
 		// Breaker switched
 		if (step == maxStep) {
 			// Choose breaker
-			if (breaker->getType8Var() == 93) {
+			if (breaker->getImageSwitchVar() == 93) {
 				// Voltage is still too high or not broken
 				if (_state.generatorVoltage > 59 || _state.generatorBreakers != 1) {
 					uint16 soundId = breaker->getList2(1);
@@ -1846,8 +1867,8 @@ void Myst::o_circuitBreakerMove(uint16 op, uint16 var, uint16 argc, uint16 *argv
 void Myst::o_circuitBreakerEndMove(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Circuit breaker end move", op);
 
-	MystResourceType12 *breaker = static_cast<MystResourceType12 *>(_invokingResource);
-	_vm->redrawArea(breaker->getType8Var());
+	MystVideoInfo *breaker = getInvokingResource<MystVideoInfo>();
+	_vm->redrawArea(breaker->getImageSwitchVar());
 	_vm->checkCursorHints();
 }
 
@@ -1869,17 +1890,58 @@ void Myst::o_boilerLightPilot(uint16 op, uint16 var, uint16 argc, uint16 *argv) 
 		_state.cabinPilotLightLit = 1;
 		_vm->redrawArea(98);
 
+		boilerFireUpdate(false);
+
 		// Put out match
 		_matchGoOutTime = _vm->_system->getMillis();
 
 		if (_state.cabinValvePosition > 0)
 			_vm->_sound->replaceBackgroundMyst(8098, 49152);
 
-		if (_state.cabinValvePosition > 12)
-			_state.treeLastMoveTime = _vm->_system->getMillis();
+		if (_state.cabinValvePosition > 12) {
+			// Compute the speed of the gauge to synchronize it with the next tree move
+			uint32 delay = treeNextMoveDelay(_state.cabinValvePosition);
+			Common::Rational rate = boilerComputeGaugeRate(_state.cabinValvePosition, delay);
+			boilerResetGauge(rate);
 
-		// TODO: Complete. Play movies
+			_state.treeLastMoveTime = _vm->_system->getMillis();
+		}
 	}
+}
+
+Common::Rational Myst::boilerComputeGaugeRate(uint16 pressure, uint32 delay) {
+	Common::Rational rate = Common::Rational(2088, delay);
+	if (pressure < 12)
+		return -rate;
+	else
+		return rate;
+}
+
+void Myst::boilerResetGauge(const Common::Rational &rate) {
+	if (!_cabinGaugeMovie || _cabinGaugeMovie->endOfVideo()) {
+		if (_vm->getCurCard() == 4098) {
+			_cabinGaugeMovie = _vm->_video->playMovie(_vm->wrapMovieFilename("cabingau", kMystStack));
+			if (!_cabinGaugeMovie)
+				error("Failed to open cabingau movie");
+
+			_cabinGaugeMovie->moveTo(243, 96);
+		} else {
+			_cabinGaugeMovie = _vm->_video->playMovie(_vm->wrapMovieFilename("cabcgfar", kMystStack));
+			if (!_cabinGaugeMovie)
+				error("Failed to open cabingau movie");
+
+			_cabinGaugeMovie->moveTo(254, 136);
+		}
+	}
+
+	Audio::Timestamp goTo;
+	if (rate > 0)
+		goTo = Audio::Timestamp(0, 0, 600);
+	else
+		goTo = _cabinGaugeMovie->getDuration();
+
+	_cabinGaugeMovie->seek(goTo);
+	_cabinGaugeMovie->setRate(rate);
 }
 
 void Myst::o_boilerIncreasePressureStop(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
@@ -1893,7 +1955,12 @@ void Myst::o_boilerIncreasePressureStop(uint16 op, uint16 var, uint16 argc, uint
 		if (_state.cabinValvePosition > 0)
 			_vm->_sound->replaceBackgroundMyst(8098, 49152);
 
-		// TODO: Play movies
+		if (_cabinGaugeMovie && !_cabinGaugeMovie->endOfVideo()) {
+			uint16 delay = treeNextMoveDelay(_state.cabinValvePosition);
+			Common::Rational rate = boilerComputeGaugeRate(_state.cabinValvePosition, delay);
+			_cabinGaugeMovie->setRate(rate);
+		}
+
 	} else if (_state.cabinValvePosition > 0)
 		_vm->_sound->replaceBackgroundMyst(4098, _state.cabinValvePosition << 10);
 }
@@ -1903,7 +1970,8 @@ void Myst::boilerPressureIncrease_run() {
 	if (!_vm->_sound->isPlaying(5098) && _state.cabinValvePosition < 25) {
 		_state.cabinValvePosition++;
 		if (_state.cabinValvePosition == 1) {
-			// TODO: Play fire movie
+			// Set fire to high
+			boilerFireUpdate(false);
 
 			// Draw fire
 			_vm->redrawArea(305);
@@ -1927,7 +1995,8 @@ void Myst::boilerPressureDecrease_run() {
 	if (!_vm->_sound->isPlaying(5098) && _state.cabinValvePosition > 0) {
 		_state.cabinValvePosition--;
 		if (_state.cabinValvePosition == 0) {
-			// TODO: Play fire movie
+			// Set fire to low
+			boilerFireUpdate(false);
 
 			// Draw fire
 			_vm->redrawArea(305);
@@ -1961,7 +2030,12 @@ void Myst::o_boilerDecreasePressureStop(uint16 op, uint16 var, uint16 argc, uint
 		if (_state.cabinValvePosition > 0)
 			_vm->_sound->replaceBackgroundMyst(8098, 49152);
 
-		// TODO: Play movies
+		if (_cabinGaugeMovie && !_cabinGaugeMovie->endOfVideo()) {
+			uint16 delay = treeNextMoveDelay(_state.cabinValvePosition);
+			Common::Rational rate = boilerComputeGaugeRate(_state.cabinValvePosition, delay);
+			_cabinGaugeMovie->setRate(rate);
+		}
+
 	} else {
 		if (_state.cabinValvePosition > 0)
 			_vm->_sound->replaceBackgroundMyst(4098, _state.cabinValvePosition << 10);
@@ -2067,6 +2141,11 @@ void Myst::tree_run() {
 				// Check if alcove is accessible
 				treeSetAlcoveAccessible();
 
+				if (_cabinGaugeMovieEnabled) {
+					Common::Rational rate = boilerComputeGaugeRate(pressure, delay);
+					boilerResetGauge(rate);
+				}
+
 				_state.treeLastMoveTime = time;
 			}
 		}
@@ -2111,22 +2190,22 @@ void Myst::o_rocketSoundSliderEndMove(uint16 op, uint16 var, uint16 argc, uint16
 	if (_state.generatorVoltage == 59 && !_state.generatorBreakers && _rocketSliderSound)
 		_vm->_sound->stopSound();
 
-	if (_invokingResource == _rocketSlider1)
+	if (getInvokingResource<MystArea>() == _rocketSlider1)
 		_state.rocketSliderPosition[0] = _rocketSlider1->_pos.y;
-	else if (_invokingResource == _rocketSlider2)
+	else if (getInvokingResource<MystArea>() == _rocketSlider2)
 		_state.rocketSliderPosition[1] = _rocketSlider2->_pos.y;
-	else if (_invokingResource == _rocketSlider3)
+	else if (getInvokingResource<MystArea>() == _rocketSlider3)
 		_state.rocketSliderPosition[2] = _rocketSlider3->_pos.y;
-	else if (_invokingResource == _rocketSlider4)
+	else if (getInvokingResource<MystArea>() == _rocketSlider4)
 		_state.rocketSliderPosition[3] = _rocketSlider4->_pos.y;
-	else if (_invokingResource == _rocketSlider5)
+	else if (getInvokingResource<MystArea>() == _rocketSlider5)
 		_state.rocketSliderPosition[4] = _rocketSlider5->_pos.y;
 
 	_vm->_sound->resumeBackgroundMyst();
 }
 
 void Myst::rocketSliderMove() {
-	MystResourceType10 *slider = static_cast<MystResourceType10 *>(_invokingResource);
+	MystAreaSlider *slider = getInvokingResource<MystAreaSlider>();
 
 	if (_state.generatorVoltage == 59 && !_state.generatorBreakers) {
 		uint16 soundId = rocketSliderGetSound(slider->_pos.y);
@@ -2186,18 +2265,27 @@ void Myst::rocketCheckSolution() {
 
 	if (solved) {
 		// Reset lever position
-		MystResourceType12 *lever = static_cast<MystResourceType12 *>(_invokingResource);
+		MystVideoInfo *lever = getInvokingResource<MystVideoInfo>();
 		lever->drawFrame(0);
 
 		// Book appearing
 		Common::String movieFile = _vm->wrapMovieFilename("selenbok", kMystStack);
-		_rocketLinkBook = _vm->_video->playMovie(movieFile, 224, 41);
-		_vm->_video->setVideoBounds(_rocketLinkBook, Audio::Timestamp(0, 0, 600), Audio::Timestamp(0, 660, 600));
+		_rocketLinkBook = _vm->_video->playMovie(movieFile);
+		if (!_rocketLinkBook)
+			error("Failed to open '%s'", movieFile.c_str());
+
+		_rocketLinkBook->moveTo(224, 41);
+		_rocketLinkBook->setBounds(Audio::Timestamp(0, 0, 600), Audio::Timestamp(0, 660, 600));
 		_vm->_video->waitUntilMovieEnds(_rocketLinkBook);
 
 		// Book looping closed
-		_rocketLinkBook = _vm->_video->playMovie(movieFile, 224, 41, true);
-		_vm->_video->setVideoBounds(_rocketLinkBook, Audio::Timestamp(0, 660, 600), Audio::Timestamp(0, 3500, 600));
+		_rocketLinkBook = _vm->_video->playMovie(movieFile);
+		if (!_rocketLinkBook)
+			error("Failed to open '%s'", movieFile.c_str());
+
+		_rocketLinkBook->moveTo(224, 41);
+		_rocketLinkBook->setLooping(true);
+		_rocketLinkBook->setBounds(Audio::Timestamp(0, 660, 600), Audio::Timestamp(0, 3500, 600));
 
 		_tempVar = 1;
 	}
@@ -2214,17 +2302,17 @@ void Myst::rocketCheckSolution() {
 void Myst::o_rocketPianoStart(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Rocket piano start move", op);
 
-	MystResourceType11 *key = static_cast<MystResourceType11 *>(_invokingResource);
+	MystAreaDrag *key = getInvokingResource<MystAreaDrag>();
 
 	// What the hell??
-	Common::Rect src = key->_subImages[1].rect;
-	Common::Rect rect = key->_subImages[0].rect;
+	Common::Rect src = key->getSubImage(1).rect;
+	Common::Rect rect = key->getSubImage(0).rect;
 	Common::Rect dest = rect;
 	dest.top = 332 - rect.bottom;
 	dest.bottom = 332 - rect.top;
 
 	// Draw pressed piano key
-	_vm->_gfx->copyImageSectionToScreen(key->_subImages[1].wdib, src, dest);
+	_vm->_gfx->copyImageSectionToScreen(key->getSubImage(1).wdib, src, dest);
 	_vm->_system->updateScreen();
 
 	// Play note
@@ -2241,29 +2329,29 @@ void Myst::o_rocketPianoMove(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	Common::Rect piano = Common::Rect(85, 123, 460, 270);
 
 	// Unpress previous key
-	MystResourceType11 *key = static_cast<MystResourceType11 *>(_invokingResource);
+	MystAreaDrag *key = getInvokingResource<MystAreaDrag>();
 
-	Common::Rect src = key->_subImages[0].rect;
+	Common::Rect src = key->getSubImage(0).rect;
 	Common::Rect dest = src;
 	dest.top = 332 - src.bottom;
 	dest.bottom = 332 - src.top;
 
 	// Draw unpressed piano key
-	_vm->_gfx->copyImageSectionToScreen(key->_subImages[0].wdib, src, dest);
+	_vm->_gfx->copyImageSectionToScreen(key->getSubImage(0).wdib, src, dest);
 
 	if (piano.contains(mouse)) {
-		MystResource *resource = _vm->updateCurrentResource();
-		if (resource && resource->type == kMystDragArea) {
+		MystArea *resource = _vm->updateCurrentResource();
+		if (resource && resource->type == kMystAreaDrag) {
 			// Press new key
-			key = static_cast<MystResourceType11 *>(resource);
-			src = key->_subImages[1].rect;
-			Common::Rect rect = key->_subImages[0].rect;
+			key = static_cast<MystAreaDrag *>(resource);
+			src = key->getSubImage(1).rect;
+			Common::Rect rect = key->getSubImage(0).rect;
 			dest = rect;
 			dest.top = 332 - rect.bottom;
 			dest.bottom = 332 - rect.top;
 
 			// Draw pressed piano key
-			_vm->_gfx->copyImageSectionToScreen(key->_subImages[1].wdib, src, dest);
+			_vm->_gfx->copyImageSectionToScreen(key->getSubImage(1).wdib, src, dest);
 
 			// Play note
 			if (_state.generatorVoltage == 59 && !_state.generatorBreakers) {
@@ -2283,15 +2371,15 @@ void Myst::o_rocketPianoMove(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 void Myst::o_rocketPianoStop(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Rocket piano end move", op);
 
-	MystResourceType8 *key = static_cast<MystResourceType8 *>(_invokingResource);
+	MystAreaImageSwitch *key = getInvokingResource<MystAreaImageSwitch>();
 
-	Common::Rect &src = key->_subImages[0].rect;
+	Common::Rect src = key->getSubImage(0).rect;
 	Common::Rect dest = src;
 	dest.top = 332 - src.bottom;
 	dest.bottom = 332 - src.top;
 
 	// Draw unpressed piano key
-	_vm->_gfx->copyImageSectionToScreen(key->_subImages[0].wdib, src, dest);
+	_vm->_gfx->copyImageSectionToScreen(key->getSubImage(0).wdib, src, dest);
 	_vm->_system->updateScreen();
 
 	_vm->_sound->stopSound();
@@ -2301,7 +2389,7 @@ void Myst::o_rocketPianoStop(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 void Myst::o_rocketLeverStartMove(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Rocket lever start move", op);
 
-	MystResourceType12 *lever = static_cast<MystResourceType12 *>(_invokingResource);
+	MystVideoInfo *lever = getInvokingResource<MystVideoInfo>();
 
 	_vm->_cursor->setCursor(700);
 	_rocketLeverPosition = 0;
@@ -2312,7 +2400,7 @@ void Myst::o_rocketOpenBook(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Rocket open link book", op);
 
 	// Flyby movie
-	_vm->_video->setVideoBounds(_rocketLinkBook, Audio::Timestamp(0, 3500, 600), Audio::Timestamp(0, 13100, 600));
+	_rocketLinkBook->setBounds(Audio::Timestamp(0, 3500, 600), Audio::Timestamp(0, 13100, 600));
 
 	// Set linkable
 	_tempVar = 2;
@@ -2321,7 +2409,7 @@ void Myst::o_rocketOpenBook(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 void Myst::o_rocketLeverMove(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Rocket lever move", op);
 
-	MystResourceType12 *lever = static_cast<MystResourceType12 *>(_invokingResource);
+	MystVideoInfo *lever = getInvokingResource<MystVideoInfo>();
 	const Common::Point &mouse = _vm->_system->getEventManager()->getMousePos();
 
 	// Make the lever follow the mouse
@@ -2350,7 +2438,7 @@ void Myst::o_rocketLeverMove(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 void Myst::o_rocketLeverEndMove(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Rocket lever end move", op);
 
-	MystResourceType12 *lever = static_cast<MystResourceType12 *>(_invokingResource);
+	MystVideoInfo *lever = getInvokingResource<MystVideoInfo>();
 
 	_vm->checkCursorHints();
 	_rocketLeverPosition = 0;
@@ -2627,7 +2715,7 @@ void Myst::clockWheel_run() {
 }
 
 void Myst::clockWheelStartTurn(uint16 wheel) {
-	MystResourceType11 *resource = static_cast<MystResourceType11 *>(_invokingResource);
+	MystAreaDrag *resource = getInvokingResource<MystAreaDrag>();
 	uint16 soundId = resource->getList1(0);
 
 	if (soundId)
@@ -2750,10 +2838,10 @@ void Myst::o_observatoryChangeSettingStop(uint16 op, uint16 var, uint16 argc, ui
 	_observatoryIncrement = 0;
 
 	// Restore button and slider
-	_vm->_gfx->copyBackBufferToScreen(_invokingResource->getRect());
+	_vm->_gfx->copyBackBufferToScreen(getInvokingResource<MystArea>()->getRect());
 	if (_observatoryCurrentSlider) {
 		_vm->redrawResource(_observatoryCurrentSlider);
-		_observatoryCurrentSlider = 0;
+		_observatoryCurrentSlider = nullptr;
 	}
 	_vm->_sound->resumeBackgroundMyst();
 }
@@ -2789,7 +2877,7 @@ void Myst::o_imagerEraseStop(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 
 void Myst::o_clockLeverStartMove(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Clock lever start move", op);
-	MystResourceType12 *lever = static_cast<MystResourceType12 *>(_invokingResource);
+	MystVideoInfo *lever = getInvokingResource<MystVideoInfo>();
 	lever->drawFrame(0);
 	_vm->_cursor->setCursor(700);
 	_clockMiddleGearMovedAlone = false;
@@ -2800,7 +2888,7 @@ void Myst::o_clockLeverMove(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Clock left lever move", op);
 
 	if (!_clockLeverPulled) {
-		MystResourceType12 *lever = static_cast<MystResourceType12 *>(_invokingResource);
+		MystVideoInfo *lever = getInvokingResource<MystVideoInfo>();
 
 		// If lever pulled
 		if (lever->pullLeverV()) {
@@ -2834,8 +2922,12 @@ void Myst::clockGearForwardOneStep(uint16 gear) {
 
 	// Set video bounds
 	uint16 gearPosition = _clockGearsPositions[gear] - 1;
-	_clockGearsVideos[gear] = _vm->_video->playMovie(_vm->wrapMovieFilename(videos[gear], kMystStack), x[gear], y[gear]);
-	_vm->_video->setVideoBounds(_clockGearsVideos[gear],
+	_clockGearsVideos[gear] = _vm->_video->playMovie(_vm->wrapMovieFilename(videos[gear], kMystStack));
+	if (!_clockGearsVideos[gear])
+		error("Failed to open %s movie", videos[gear]);
+
+	_clockGearsVideos[gear]->moveTo(x[gear], y[gear]);
+	_clockGearsVideos[gear]->setBounds(
 			Audio::Timestamp(0, startTime[gearPosition], 600),
 			Audio::Timestamp(0, endTime[gearPosition], 600));
 }
@@ -2847,8 +2939,12 @@ void Myst::clockWeightDownOneStep() {
 
 	// Set video bounds
 	if (updateVideo) {
-		_clockWeightVideo = _vm->_video->playMovie(_vm->wrapMovieFilename("cl1wlfch", kMystStack) , 124, 0);
-		_vm->_video->setVideoBounds(_clockWeightVideo,
+		_clockWeightVideo = _vm->_video->playMovie(_vm->wrapMovieFilename("cl1wlfch", kMystStack));
+		if (!_clockWeightVideo)
+			error("Failed to open cl1wlfch movie");
+
+		_clockWeightVideo->moveTo(124, 0);
+		_clockWeightVideo->setBounds(
 				Audio::Timestamp(0, _clockWeightPosition, 600),
 				Audio::Timestamp(0, _clockWeightPosition + 246, 600));
 	}
@@ -2876,7 +2972,7 @@ void Myst::o_clockLeverEndMove(uint16 op, uint16 var, uint16 argc, uint16 *argv)
 	// Let movies stop playing
 	for (uint i = 0; i < ARRAYSIZE(videos); i++) {
 		VideoHandle handle = _vm->_video->findVideoHandle(_vm->wrapMovieFilename(videos[i], kMystStack));
-		if (handle != NULL_VID_HANDLE)
+		if (handle)
 			_vm->_video->delayUntilMovieEnds(handle);
 	}
 
@@ -2884,7 +2980,7 @@ void Myst::o_clockLeverEndMove(uint16 op, uint16 var, uint16 argc, uint16 *argv)
 		_vm->_sound->replaceSoundMyst(8113);
 
 	// Release lever
-	MystResourceType12 *lever = static_cast<MystResourceType12 *>(_invokingResource);
+	MystVideoInfo *lever = getInvokingResource<MystVideoInfo>();
 	lever->releaseLeverV();
 
 	// Check if puzzle is solved
@@ -2901,8 +2997,12 @@ void Myst::clockGearsCheckSolution() {
 
 		// Make weight go down
 		_vm->_sound->replaceSoundMyst(9113);
-		_clockWeightVideo = _vm->_video->playMovie(_vm->wrapMovieFilename("cl1wlfch", kMystStack) , 124, 0);
-		_vm->_video->setVideoBounds(_clockWeightVideo,
+		_clockWeightVideo = _vm->_video->playMovie(_vm->wrapMovieFilename("cl1wlfch", kMystStack));
+		if (!_clockWeightVideo)
+			error("Failed to open cl1wlfch movie");
+
+		_clockWeightVideo->moveTo(124, 0);
+		_clockWeightVideo->setBounds(
 				Audio::Timestamp(0, _clockWeightPosition, 600),
 				Audio::Timestamp(0, 2214, 600));
 		_vm->_video->waitUntilMovieEnds(_clockWeightVideo);
@@ -2913,7 +3013,7 @@ void Myst::clockGearsCheckSolution() {
 		_vm->_sound->replaceSoundMyst(7113);
 
 		// Gear opening video
-		_vm->_video->playMovieBlocking(_vm->wrapMovieFilename("cl1wggat", kMystStack) , 195, 225);
+		_vm->_video->playMovieBlocking(_vm->wrapMovieFilename("cl1wggat", kMystStack), 195, 225);
 		_state.gearsOpen = 1;
 		_vm->redrawArea(40);
 
@@ -2924,7 +3024,7 @@ void Myst::clockGearsCheckSolution() {
 void Myst::o_clockResetLeverStartMove(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Clock reset lever start move", op);
 
-	MystResourceType12 *lever = static_cast<MystResourceType12 *>(_invokingResource);
+	MystVideoInfo *lever = getInvokingResource<MystVideoInfo>();
 	lever->drawFrame(0);
 	_vm->_cursor->setCursor(700);
 }
@@ -2932,7 +3032,7 @@ void Myst::o_clockResetLeverStartMove(uint16 op, uint16 var, uint16 argc, uint16
 void Myst::o_clockResetLeverMove(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Clock reset lever move", op);
 
-	MystResourceType12 *lever = static_cast<MystResourceType12 *>(_invokingResource);
+	MystVideoInfo *lever = getInvokingResource<MystVideoInfo>();
 
 	// If pulled
 	if (lever->pullLeverV() && _clockWeightPosition != 0)
@@ -2956,7 +3056,7 @@ void Myst::clockReset() {
 	// Let movies stop playing
 	for (uint i = 0; i < ARRAYSIZE(videos); i++) {
 		VideoHandle handle = _vm->_video->findVideoHandle(_vm->wrapMovieFilename(videos[i], kMystStack));
-		if (handle != NULL_VID_HANDLE)
+		if (handle)
 			_vm->_video->delayUntilMovieEnds(handle);
 	}
 
@@ -2968,7 +3068,16 @@ void Myst::clockReset() {
 		_vm->_system->delayMillis(1000);
 		_vm->_sound->replaceSoundMyst(7113);
 
-		// TODO: Play cl1wggat backwards
+		// Gear closing movie
+		VideoHandle handle = _vm->_video->playMovie(_vm->wrapMovieFilename("cl1wggat", kMystStack));
+		if (!handle)
+			error("Failed to open cl1wggat movie");
+
+		handle->moveTo(195, 225);
+		handle->seek(handle->getDuration());
+		handle->setRate(-1);
+		_vm->_video->waitUntilMovieEnds(handle);
+
 		// Redraw gear
 		_state.gearsOpen = 0;
 		_vm->redrawArea(40);
@@ -2978,18 +3087,17 @@ void Myst::clockReset() {
 }
 
 void Myst::clockResetWeight() {
-	_clockWeightVideo = _vm->_video->playMovie(_vm->wrapMovieFilename("cl1wlfch", kMystStack) , 124, 0);
+	_vm->_sound->replaceSoundMyst(9113);
 
-	if (!(_vm->getFeatures() & GF_ME)) {
-		// Set video bounds, weight going up
-		_vm->_video->setVideoBounds(_clockWeightVideo,
-				Audio::Timestamp(0, 2214 * 2 - _clockWeightPosition, 600),
-				Audio::Timestamp(0, 2214 * 2, 600));
-	} else {
-		//FIXME: Needs QT backwards playing, for now just display the weight up
-		warning("Weight going back up not implemented");
-		_vm->_video->drawVideoFrame(_clockWeightVideo, Audio::Timestamp(0, 0, 600));
-	}
+	_clockWeightVideo = _vm->_video->playMovie(_vm->wrapMovieFilename("cl1wlfch", kMystStack));
+	if (!_clockWeightVideo)
+		error("Failed to open cl1wlfch movie");
+
+	_clockWeightVideo->moveTo(124, 0);
+
+	// Play the movie backwards, weight going up
+	_clockWeightVideo->seek(Audio::Timestamp(0, _clockWeightPosition, 600));
+	_clockWeightVideo->setRate(-1);
 
 	// Reset position
 	_clockWeightPosition = 0;
@@ -3004,8 +3112,12 @@ void Myst::clockResetGear(uint16 gear) {
 	// Set video bounds, gears going to 3
 	uint16 gearPosition = _clockGearsPositions[gear] - 1;
 	if (gearPosition != 2) {
-		_clockGearsVideos[gear] = _vm->_video->playMovie(_vm->wrapMovieFilename(videos[gear], kMystStack), x[gear], y[gear]);
-		_vm->_video->setVideoBounds(_clockGearsVideos[gear],
+		_clockGearsVideos[gear] = _vm->_video->playMovie(_vm->wrapMovieFilename(videos[gear], kMystStack));
+		if (!_clockGearsVideos[gear])
+			error("Failed to open gears movie");
+
+		_clockGearsVideos[gear]->moveTo(x[gear], y[gear]);
+		_clockGearsVideos[gear]->setBounds(
 				Audio::Timestamp(0, time[gearPosition], 600),
 				Audio::Timestamp(0, time[2], 600));
 	}
@@ -3018,7 +3130,7 @@ void Myst::o_clockResetLeverEndMove(uint16 op, uint16 var, uint16 argc, uint16 *
 	debugC(kDebugScript, "Opcode %d: Clock reset lever end move", op);
 
 	// Get current lever frame
-	MystResourceType12 *lever = static_cast<MystResourceType12 *>(_invokingResource);
+	MystVideoInfo *lever = getInvokingResource<MystVideoInfo>();
 
 	lever->releaseLeverV();
 
@@ -3082,8 +3194,8 @@ void Myst::towerRotationMap_run() {
 
 void Myst::o_towerRotationMap_init(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	_towerRotationMapRunning = true;
-	_towerRotationMapTower = static_cast<MystResourceType11 *>(_invokingResource);
-	_towerRotationMapLabel = static_cast<MystResourceType8 *>(_vm->_resources[argv[0]]);
+	_towerRotationMapTower = getInvokingResource<MystAreaImageSwitch>();
+	_towerRotationMapLabel = _vm->getViewResource<MystAreaImageSwitch>(argv[0]);
 	_tempVar = 0;
 	_startTime = 0;
 	_towerRotationMapClicked = false;
@@ -3095,7 +3207,7 @@ void Myst::towerRotationDrawBuildings() {
 
 	// Draw other resources
 	for (uint i = 1; i <= 10; i++) {
-		MystResourceType8 *resource = static_cast<MystResourceType8 *>(_vm->_resources[i]);
+		MystAreaImageSwitch *resource = _vm->getViewResource<MystAreaImageSwitch>(i);
 		_vm->redrawResource(resource, false);
 	}
 }
@@ -3148,13 +3260,21 @@ Common::Point Myst::towerRotationMapComputeCoords(const Common::Point &center, u
 }
 
 void Myst::towerRotationMapDrawLine(const Common::Point &center, const Common::Point &end) {
-	Graphics::PixelFormat pf = _vm->_system->getScreenFormat();
-	uint32 color = 0;
+	uint32 color;
 
-	if (!_towerRotationOverSpot)
-		color = pf.RGBToColor(0xFF, 0xFF, 0xFF); // White
-	else
-		color = pf.RGBToColor(0xFF, 0, 0); // Red
+	if (_vm->getFeatures() & GF_ME) {
+		Graphics::PixelFormat pf = _vm->_system->getScreenFormat();
+
+		if (!_towerRotationOverSpot)
+			color = pf.RGBToColor(0xFF, 0xFF, 0xFF); // White
+		else
+			color = pf.RGBToColor(0xFF, 0, 0); // Red
+	} else {
+		if (!_towerRotationOverSpot)
+			color = 0xFF; // White
+		else
+			color = 0xF9; // Red
+	}
 
 	const Common::Rect rect = Common::Rect(106, 42, 459, 273);
 
@@ -3198,7 +3318,7 @@ void Myst::o_forechamberDoor_init(uint16 op, uint16 var, uint16 argc, uint16 *ar
 void Myst::o_shipAccess_init(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	// Enable acces to the ship
 	if (_state.shipFloating) {
-		_invokingResource->setEnabled(true);
+		getInvokingResource<MystArea>()->setEnabled(true);
 	}
 }
 
@@ -3207,7 +3327,7 @@ void Myst::o_butterflies_init(uint16 op, uint16 var, uint16 argc, uint16 *argv) 
 
 	// Used for Card 4256 (Butterfly Movie Activation)
 	if (!_butterfliesMoviePlayed) {
-		MystResourceType6 *butterflies = static_cast<MystResourceType6 *>(_invokingResource);
+		MystAreaVideo *butterflies = getInvokingResource<MystAreaVideo>();
 		butterflies->playMovie();
 
 		_butterfliesMoviePlayed = true;
@@ -3218,8 +3338,8 @@ void Myst::o_imager_init(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Imager init", op);
 	debugC(kDebugScript, "Var: %d", var);
 
-	MystResourceType7 *select = static_cast<MystResourceType7 *>(_invokingResource);
-	_imagerMovie = static_cast<MystResourceType6 *>(select->getSubResource(getVar(var)));
+	MystAreaActionSwitch *select = getInvokingResource<MystAreaActionSwitch>();
+	_imagerMovie = static_cast<MystAreaVideo *>(select->getSubResource(getVar(var)));
 	_imagerRunning = true;
 }
 
@@ -3228,8 +3348,8 @@ void Myst::imager_run() {
 
 	if (_state.imagerActive && _state.imagerSelection == 67) {
 		VideoHandle water = _imagerMovie->playMovie();
-		_vm->_video->setVideoBounds(water, Audio::Timestamp(0, 1814, 600), Audio::Timestamp(0, 4204, 600));
-		_vm->_video->setVideoLooping(water, true);
+		water->setBounds(Audio::Timestamp(0, 1814, 600), Audio::Timestamp(0, 4204, 600));
+		water->setLooping(true);
 	}
 }
 
@@ -3246,7 +3366,7 @@ void Myst::libraryBookcaseTransform_run(void) {
 
 		if (_state.libraryBookcaseDoor) {
 			_vm->_gfx->copyImageSectionToBackBuffer(11179, Common::Rect(0, 0, 106, 81), Common::Rect(0, 72, 106, 153));
-			_vm->_gfx->runTransition(6, Common::Rect(0, 72, 106, 153), 5, 10);
+			_vm->_gfx->runTransition(kTransitionBottomToTop, Common::Rect(0, 72, 106, 153), 5, 10);
 			_vm->_sound->playSoundBlocking(7348);
 			_vm->_sound->replaceBackgroundMyst(4348, 16384);
 		} else {
@@ -3262,8 +3382,8 @@ void Myst::libraryBookcaseTransform_run(void) {
 
 void Myst::o_libraryBookcaseTransform_init(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	if (_libraryBookcaseChanged) {
-		MystResourceType7 *resource = static_cast<MystResourceType7 *>(_invokingResource);
-		_libraryBookcaseMovie = static_cast<MystResourceType6 *>(resource->getSubResource(getVar(0)));
+		MystAreaActionSwitch *resource = getInvokingResource<MystAreaActionSwitch>();
+		_libraryBookcaseMovie = static_cast<MystAreaVideo *>(resource->getSubResource(getVar(0)));
 		_libraryBookcaseSoundId = argv[0];
 		_libraryBookcaseMoving = true;
 	}
@@ -3341,8 +3461,11 @@ void Myst::gullsFly1_run() {
 			else
 				x = _vm->_rnd->getRandomNumber(160) + 260;
 
-			_vm->_video->playMovie(_vm->wrapMovieFilename(gulls[video], kMystStack), x, 0);
+			VideoHandle handle = _vm->_video->playMovie(_vm->wrapMovieFilename(gulls[video], kMystStack));
+			if (!handle)
+				error("Failed to open gulls movie");
 
+			handle->moveTo(x, 0);
 			_gullsNextTime = time + _vm->_rnd->getRandomNumber(16667) + 13334;
 		}
 	}
@@ -3353,17 +3476,17 @@ void Myst::o_observatory_init(uint16 op, uint16 var, uint16 argc, uint16 *argv) 
 
 	_tempVar = 0;
 	_observatoryNotInitialized = true;
-	_observatoryVisualizer = static_cast<MystResourceType8 *>(_invokingResource);
-	_observatoryGoButton = static_cast<MystResourceType8 *>(_vm->_resources[argv[0]]);
+	_observatoryVisualizer = getInvokingResource<MystAreaImageSwitch>();
+	_observatoryGoButton = _vm->getViewResource<MystAreaImageSwitch>(argv[0]);
 	if (observatoryIsDDMMYYYY2400()) {
-		_observatoryDaySlider = static_cast<MystResourceType10 *>(_vm->_resources[argv[1]]);
-		_observatoryMonthSlider = static_cast<MystResourceType10 *>(_vm->_resources[argv[2]]);
+		_observatoryDaySlider = _vm->getViewResource<MystAreaSlider>(argv[1]);
+		_observatoryMonthSlider = _vm->getViewResource<MystAreaSlider>(argv[2]);
 	} else {
-		_observatoryMonthSlider = static_cast<MystResourceType10 *>(_vm->_resources[argv[1]]);
-		_observatoryDaySlider = static_cast<MystResourceType10 *>(_vm->_resources[argv[2]]);
+		_observatoryMonthSlider = _vm->getViewResource<MystAreaSlider>(argv[1]);
+		_observatoryDaySlider = _vm->getViewResource<MystAreaSlider>(argv[2]);
 	}
-	_observatoryYearSlider = static_cast<MystResourceType10 *>(_vm->_resources[argv[3]]);
-	_observatoryTimeSlider = static_cast<MystResourceType10 *>(_vm->_resources[argv[4]]);
+	_observatoryYearSlider = _vm->getViewResource<MystAreaSlider>(argv[3]);
+	_observatoryTimeSlider = _vm->getViewResource<MystAreaSlider>(argv[4]);
 
 	// Set date selection sliders position
 	_observatoryDaySlider->setPosition(_state.observatoryDaySlider);
@@ -3385,18 +3508,14 @@ bool Myst::observatoryIsDDMMYYYY2400() {
 }
 
 void Myst::observatoryUpdateVisualizer(uint16 x, uint16 y) {
-	Common::Rect &visu0 = _observatoryVisualizer->_subImages[0].rect;
-	Common::Rect &visu1 = _observatoryVisualizer->_subImages[1].rect;
+	Common::Rect visu;
+	visu.left = x;
+	visu.right = visu.left + 105;
+	visu.bottom = 512 - y;
+	visu.top = visu.bottom - 106;
 
-	visu0.left = x;
-	visu0.right = visu0.left + 105;
-	visu0.bottom = 512 - y;
-	visu0.top = visu0.bottom - 106;
-
-	visu1.left = visu0.left;
-	visu1.top = visu0.top;
-	visu1.right = visu0.right;
-	visu1.bottom = visu0.bottom;
+	_observatoryVisualizer->setSubImageRect(0, visu);
+	_observatoryVisualizer->setSubImageRect(1, visu);
 }
 
 void Myst::observatorySetTargetToSetting() {
@@ -3487,8 +3606,11 @@ void Myst::gullsFly2_run() {
 	if (time > _gullsNextTime) {
 		uint16 video = _vm->_rnd->getRandomNumber(3);
 		if (video != 3) {
-			_vm->_video->playMovie(_vm->wrapMovieFilename(gulls[video], kMystStack), 424, 0);
+			VideoHandle handle = _vm->_video->playMovie(_vm->wrapMovieFilename(gulls[video], kMystStack));
+			if (!handle)
+				error("Failed to open gulls movie");
 
+			handle->moveTo(424, 0);
 			_gullsNextTime = time + _vm->_rnd->getRandomNumber(16667) + 13334;
 		}
 	}
@@ -3497,45 +3619,103 @@ void Myst::gullsFly2_run() {
 void Myst::o_treeCard_init(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Enter tree card", op);
 
-	_tree = static_cast<MystResourceType8 *>(_invokingResource);
+	_tree = getInvokingResource<MystAreaImageSwitch>();
 }
 
 void Myst::o_treeEntry_init(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Enter tree card with entry", op);
 
-	_treeAlcove = static_cast<MystResourceType5 *>(_invokingResource);
+	_treeAlcove = getInvokingResource<MystArea>();
 	_treeMinAccessiblePosition = argv[0];
 	_treeMaxAccessiblePosition = argv[1];
 
 	treeSetAlcoveAccessible();
 }
 
-void Myst::opcode_218(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
-	varUnusedCheck(op, var);
+void Myst::o_boilerMovies_init(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
+	debugC(kDebugScript, "Opcode %d: Boiler movies init", op);
 
-	// Used for Card 4097 (Cabin Boiler)
-	// TODO: Fill in logic
-	if (false) {
-		_vm->_video->playMovieBlocking(_vm->wrapMovieFilename("cabfirfr", kMystStack), 254, 244);
-		_vm->_video->playMovieBlocking(_vm->wrapMovieFilename("cabcgfar", kMystStack), 254, 138);
+	boilerFireInit();
+	boilerGaugeInit();
+}
+
+void Myst::boilerFireInit() {
+	if (_vm->getCurCard() == 4098) {
+		_cabinFireMovie = _vm->_video->playMovie(_vm->wrapMovieFilename("cabfire", kMystStack));
+		if (!_cabinFireMovie)
+				error("Failed to open cabfire movie");
+
+		_cabinFireMovie->moveTo(240, 279);
+		_cabinFireMovie->setLooping(true);
+		_cabinFireMovie->pause(true);
+
+		_vm->redrawArea(305);
+		boilerFireUpdate(true);
+	} else {
+		if (_state.cabinPilotLightLit == 1 && _state.cabinValvePosition >= 1) {
+			_cabinFireMovie = _vm->_video->playMovie(_vm->wrapMovieFilename("cabfirfr", kMystStack));
+			if (!_cabinFireMovie)
+				error("Failed to open cabfirfr movie");
+
+			_cabinFireMovie->moveTo(254, 244);
+			_cabinFireMovie->setLooping(true);
+		}
+	}
+}
+
+void Myst::boilerFireUpdate(bool init) {
+	uint position = _cabinFireMovie->getTime();
+
+	if (_state.cabinPilotLightLit == 1) {
+		if (_state.cabinValvePosition == 0) {
+			if (position > (uint)Audio::Timestamp(0, 200, 600).msecs() || init) {
+				_cabinFireMovie->setBounds(Audio::Timestamp(0, 0, 600), Audio::Timestamp(0, 100, 600));
+				_cabinFireMovie->pause(false);
+			}
+		} else {
+			if (position < (uint)Audio::Timestamp(0, 200, 600).msecs() || init) {
+				_cabinFireMovie->setBounds(Audio::Timestamp(0, 201, 600), Audio::Timestamp(0, 1900, 600));
+				_cabinFireMovie->pause(false);
+			}
+		}
+	}
+}
+
+void Myst::boilerGaugeInit() {
+	if (_vm->getCurCard() == 4098) {
+		_cabinGaugeMovie = _vm->_video->playMovie(_vm->wrapMovieFilename("cabingau", kMystStack));
+		if (!_cabinGaugeMovie)
+			error("Failed to open cabingau movie");
+
+		_cabinGaugeMovie->moveTo(243, 96);
+	} else {
+		_cabinGaugeMovie = _vm->_video->playMovie(_vm->wrapMovieFilename("cabcgfar", kMystStack));
+		if (!_cabinGaugeMovie)
+			error("Failed to open cabcgfar movie");
+
+		_cabinGaugeMovie->moveTo(254, 136);
 	}
 
-	// Used for Card 4098 (Cabin Boiler)
-	// TODO: Fill in logic
-	if (false) {
-		_vm->_video->playMovieBlocking(_vm->wrapMovieFilename("cabfire", kMystStack), 240, 279);
-		_vm->_video->playMovieBlocking(_vm->wrapMovieFilename("cabingau", kMystStack), 243, 97);
-	}
+	Audio::Timestamp frame;
+
+	if (_state.cabinPilotLightLit == 1 && _state.cabinValvePosition > 12)
+		frame = _cabinGaugeMovie->getDuration();
+	else
+		frame = Audio::Timestamp(0, 0, 600);
+
+	_vm->_video->drawVideoFrame(_cabinGaugeMovie, frame);
+
+	_cabinGaugeMovieEnabled = true;
 }
 
 void Myst::o_rocketSliders_init(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Rocket sliders init", op);
 
-	_rocketSlider1 = static_cast<MystResourceType10 *>(_vm->_resources[argv[0]]);
-	_rocketSlider2 = static_cast<MystResourceType10 *>(_vm->_resources[argv[1]]);
-	_rocketSlider3 = static_cast<MystResourceType10 *>(_vm->_resources[argv[2]]);
-	_rocketSlider4 = static_cast<MystResourceType10 *>(_vm->_resources[argv[3]]);
-	_rocketSlider5 = static_cast<MystResourceType10 *>(_vm->_resources[argv[4]]);
+	_rocketSlider1 = _vm->getViewResource<MystAreaSlider>(argv[0]);
+	_rocketSlider2 = _vm->getViewResource<MystAreaSlider>(argv[1]);
+	_rocketSlider3 = _vm->getViewResource<MystAreaSlider>(argv[2]);
+	_rocketSlider4 = _vm->getViewResource<MystAreaSlider>(argv[3]);
+	_rocketSlider5 = _vm->getViewResource<MystAreaSlider>(argv[4]);
 
 	// Initialize sliders position
 	for (uint i = 0; i < 5; i++)
@@ -3581,18 +3761,27 @@ void Myst::greenBook_run() {
 		_vm->_sound->stopSound();
 		_vm->_sound->pauseBackgroundMyst();
 
+		VideoHandle book = _vm->_video->playMovie(file);
+		if (!book)
+			error("Failed to open '%s'", file.c_str());
+
+		book->moveTo(314, 76);
+
 		if (_globals.ending != 4) {
 			_tempVar = 2;
-			_vm->_video->playMovie(file, 314, 76);
 		} else {
-			VideoHandle book = _vm->_video->playMovie(file, 314, 76, true);
-			_vm->_video->setVideoBounds(book, Audio::Timestamp(0, loopStart, 600), Audio::Timestamp(0, loopEnd, 600));
+			book->setBounds(Audio::Timestamp(0, loopStart, 600), Audio::Timestamp(0, loopEnd, 600));
+			book->setLooping(true);
 			_tempVar = 0;
 		}
 	} else if (_tempVar == 2 && !_vm->_video->isVideoPlaying()) {
-		VideoHandle book = _vm->_video->playMovie(file, 314, 76);
-		_vm->_video->setVideoBounds(book, Audio::Timestamp(0, loopStart, 600), Audio::Timestamp(0, loopEnd, 600));
-		_vm->_video->setVideoLooping(book, true);
+		VideoHandle book = _vm->_video->playMovie(file);
+		if (!book)
+			error("Failed to open '%s'", file.c_str());
+
+		book->moveTo(314, 76);
+		book->setBounds(Audio::Timestamp(0, loopStart, 600), Audio::Timestamp(0, loopEnd, 600));
+		book->setLooping(true);
 		_tempVar = 0;
 	}
 }
@@ -3615,8 +3804,11 @@ void Myst::gullsFly3_run() {
 		if (video != 3) {
 			uint16 x = _vm->_rnd->getRandomNumber(280) + 135;
 
-			_vm->_video->playMovie(_vm->wrapMovieFilename(gulls[video], kMystStack), x, 0);
+			VideoHandle handle = _vm->_video->playMovie(_vm->wrapMovieFilename(gulls[video], kMystStack));
+			if (!handle)
+				error("Failed to open gulls movie");
 
+			handle->moveTo(x, 0);
 			_gullsNextTime = time + _vm->_rnd->getRandomNumber(16667) + 13334;
 		}
 	}
@@ -3639,13 +3831,22 @@ void Myst::o_bookAddSpecialPage_exit(uint16 op, uint16 var, uint16 argc, uint16 
 void Myst::o_treeCard_exit(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Exit tree card", op);
 
-	_tree = 0;
+	_tree = nullptr;
 }
 
 void Myst::o_treeEntry_exit(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
 	debugC(kDebugScript, "Opcode %d: Exit tree card with entry", op);
 
-	_treeAlcove = 0;
+	_treeAlcove = nullptr;
+}
+
+void Myst::o_boiler_exit(uint16 op, uint16 var, uint16 argc, uint16 *argv) {
+	debugC(kDebugScript, "Opcode %d: Exit boiler card", op);
+
+	_cabinGaugeMovie = VideoHandle();
+	_cabinFireMovie = VideoHandle();
+
+	_cabinGaugeMovieEnabled = false;
 }
 
 void Myst::o_generatorControlRoom_exit(uint16 op, uint16 var, uint16 argc, uint16 *argv) {

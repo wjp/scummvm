@@ -8,20 +8,20 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  */
 
-#ifndef SCUMM_H
-#define SCUMM_H
+#ifndef SCUMM_SCUMM_H
+#define SCUMM_SCUMM_H
 
 #include "engines/engine.h"
 
@@ -150,7 +150,13 @@ enum GameFeatures {
 	GF_HE_985             = 1 << 14,
 
 	/** HE games with 16 bit color */
-	GF_16BIT_COLOR         = 1 << 15
+	GF_16BIT_COLOR         = 1 << 15,
+
+	/**
+	 * SCUMM v5-v7 Mac games stored in a container file
+	 * Used to differentiate between m68k and PPC versions of Indy4
+	 */
+	GF_MAC_CONTAINER       = 1 << 16
 };
 
 /* SCUMM Debug Channels */
@@ -166,7 +172,8 @@ enum {
 	DEBUG_SOUND	=	1 << 7,		// General Sound Debug
 	DEBUG_ACTORS	=	1 << 8,		// General Actor Debug
 	DEBUG_INSANE	=	1 << 9,		// Track INSANE
-	DEBUG_SMUSH	=	1 << 10		// Track SMUSH
+	DEBUG_SMUSH	=	1 << 10,		// Track SMUSH
+	DEBUG_MOONBASE_AI = 1 << 11		// Moonbase AI
 };
 
 struct VerbSlot;
@@ -234,6 +241,7 @@ enum ScummGameId {
 	GID_FBEAR,
 	GID_PUTTMOON,
 	GID_FUNPACK,
+	GID_PUTTZOO,
 	GID_FREDDI3,
 	GID_BIRTHDAYRED,
 	GID_BIRTHDAYYELLOW,
@@ -249,6 +257,7 @@ enum ScummGameId {
 	GID_BASEBALL2003,
 	GID_BASKETBALL,
 	GID_MOONBASE,
+	GID_PJGAMES,
 	GID_HECUP		// CUP demos
 };
 
@@ -290,7 +299,14 @@ struct StringTab : StringSlot {
 	}
 };
 
+struct ScummEngine_v0_Delays {
+	bool _screenScroll;
+	uint _objectRedrawCount;
+	uint _objectStripRedrawCount;
+	uint _actorRedrawCount;
+	uint _actorLimbRedrawDrawCount;
 
+};
 
 enum WhereIsObject {
 	WIO_NOT_FOUND = -1,
@@ -579,7 +595,7 @@ protected:
 	bool _dumpScripts;
 	bool _hexdumpScripts;
 	bool _showStack;
-	uint16 _debugMode;
+	bool _debugMode;
 
 	// Save/Load class - some of this may be GUI
 	byte _saveLoadFlag, _saveLoadSlot;
@@ -588,13 +604,17 @@ protected:
 	Common::String _saveLoadFileName;
 	Common::String _saveLoadDescription;
 
-	bool saveState(Common::OutSaveFile *out, bool writeHeader = true);
-	bool saveState(int slot, bool compat);
+	bool saveState(Common::WriteStream *out, bool writeHeader = true);
+	bool saveState(int slot, bool compat, Common::String &fileName);
 	bool loadState(int slot, bool compat);
+	bool loadState(int slot, bool compat, Common::String &fileName);
 	virtual void saveOrLoad(Serializer *s);
 	void saveResource(Serializer *ser, ResType type, ResId idx);
 	void loadResource(Serializer *ser, ResType type, ResId idx);
 	void loadResourceOLD(Serializer *ser, ResType type, ResId idx);	// "Obsolete"
+
+	virtual Common::SeekableReadStream *openSaveFileForReading(int slot, bool compat, Common::String &fileName);
+	virtual Common::WriteStream *openSaveFileForWriting(int slot, bool compat, Common::String &fileName);
 
 	Common::String makeSavegameName(int slot, bool temporary) const {
 		return makeSavegameName(_targetName, slot, temporary);
@@ -611,17 +631,14 @@ public:
 	void requestSave(int slot, const Common::String &name);
 	void requestLoad(int slot);
 
+	Common::String getTargetName() const { return _targetName; }
+
 // thumbnail + info stuff
 public:
-	Graphics::Surface *loadThumbnailFromSlot(int slot) {
-		return loadThumbnailFromSlot(_targetName.c_str(), slot);
-	}
-	static Graphics::Surface *loadThumbnailFromSlot(const char *target, int slot);
-
-	static bool loadInfosFromSlot(const char *target, int slot, SaveStateMetaInfos *stuff);
+	static bool querySaveMetaInfos(const char *target, int slot, int heversion, Common::String &desc, Graphics::Surface *&thumbnail, SaveStateMetaInfos *&timeInfos);
 
 protected:
-	void saveInfos(Common::WriteStream* file);
+	void saveInfos(Common::WriteStream *file);
 	static bool loadInfos(Common::SeekableReadStream *file, SaveStateMetaInfos *stuff);
 
 protected:
@@ -633,7 +650,7 @@ protected:
 	byte _opcode;
 	byte _currentScript;
 	int _scummStackPos;
-	int _vmStack[150];
+	int _vmStack[256];
 
 	OpcodeEntry _opcodes[256];
 
@@ -645,7 +662,7 @@ protected:
 	int	getScriptSlot();
 
 	void startScene(int room, Actor *a, int b);
-	void startManiac();
+	bool startManiac();
 
 public:
 	void runScript(int script, bool freezeResistant, bool recursive, int *lvarptr, int cycle = 0);
@@ -662,6 +679,7 @@ protected:
 	virtual void checkAndRunSentenceScript();
 	void runExitScript();
 	void runEntryScript();
+	void runQuitScript();
 	void runAllScripts();
 	void freezeScripts(int scr);
 	void unfreezeScripts();
@@ -694,6 +712,7 @@ protected:
 	virtual int readVar(uint var);
 	virtual void writeVar(uint var, int value);
 
+protected:
 	void beginCutscene(int *args);
 	void endCutscene();
 	void abortCutscene();
@@ -712,6 +731,9 @@ public:
 	Common::String _containerFile;
 
 	bool openFile(BaseScummFile &file, const Common::String &filename, bool resourceFile = false);
+
+	/** Is this game a Mac m68k v5 game with iMuse? */
+	bool isMacM68kIMuse() const;
 
 protected:
 	int _resourceHeaderSize;
@@ -1083,6 +1105,8 @@ public:
 	// Indy4 Amiga specific
 	byte *_verbPalette;
 
+	ScummEngine_v0_Delays _V0Delay;
+
 protected:
 	int _shadowPaletteSize;
 	byte _currentPalette[3 * 256];
@@ -1117,6 +1141,8 @@ public:
 
 	byte getNumBoxes();
 	byte *getBoxMatrixBaseAddr();
+	byte *getBoxConnectionBase(int box);
+
 	int getNextBox(byte from, byte to);
 
 	void setBoxFlags(int box, int val);
@@ -1169,6 +1195,7 @@ protected:
 	byte _charsetBuffer[512];
 
 	bool _keepText;
+	byte _msgCount;
 
 	int _nextLeft, _nextTop;
 
@@ -1350,6 +1377,8 @@ public:
 	byte VAR_SCRIPT_CYCLE;			// Used in runScript()/runObjectScript()
 	byte VAR_NUM_SCRIPT_CYCLES;		// Used in runAllScripts()
 
+	byte VAR_QUIT_SCRIPT;			// Used in confirmExitDialog()
+
 	// Exists both in V7 and in V72HE:
 	byte VAR_NUM_GLOBAL_OBJS;
 
@@ -1363,7 +1392,7 @@ public:
 public:
 	bool towns_isRectInStringBox(int x1, int y1, int x2, int y2);
 	byte _townsPaletteFlags;
-	byte _townsCharsetColorMap[16];	
+	byte _townsCharsetColorMap[16];
 
 protected:
 	void towns_drawStripToScreen(VirtScreen *vs, int dstX, int dstY, int srcX, int srcY, int w, int h);

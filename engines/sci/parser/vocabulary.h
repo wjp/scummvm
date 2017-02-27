@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -156,7 +156,7 @@ typedef Common::Array<synonym_t> SynonymList;
 struct AltInput {
 	const char *_input;
 	const char *_replacement;
-	unsigned int _inputLength;
+	uint32 _inputLength;
 	bool _prefix;
 };
 
@@ -231,6 +231,16 @@ public:
 	 *			language described by the grammar passed in 'rules'.
 	 */
 	int parseGNF(const ResultWordListList &words, bool verbose = false);
+
+	/**
+	 * Find and store reference for future pronouns
+	 */
+	bool storePronounReference();
+
+	/**
+	 * Replace pronouns by stored reference
+	 */
+	void replacePronouns(ResultWordListList &words);
 
 	/**
 	 * Constructs the Greibach Normal Form of the grammar supplied in 'branches'.
@@ -359,6 +369,8 @@ private:
 	WordMap _parserWords;
 	SynonymList _synonyms; /**< The list of synonyms */
 	Common::Array<Common::List<AltInput> > _altInputs;
+
+	int _pronounReference;
 
 public:
 	// Accessed by said()

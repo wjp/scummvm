@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -46,6 +46,7 @@ LureLanguage LureEngine::getLureLanguage() const {
 	case Common::FR_FRA: return LANG_FR_FRA;
 	case Common::DE_DEU: return LANG_DE_DEU;
 	case Common::ES_ESP: return LANG_ES_ESP;
+	case Common::RU_RUS: return LANG_RU_RUS;
 	case Common::EN_ANY: return LANG_EN_ANY;
 	case Common::UNK_LANG: return LANG_UNKNOWN;
 	default:
@@ -70,7 +71,7 @@ static const LureGameDescription gameDescriptions[] = {
 			"VGA",
 			AD_ENTRY1("disk1.vga", "b2a8aa6d7865813a17a3c636e063572e"),
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
@@ -83,7 +84,7 @@ static const LureGameDescription gameDescriptions[] = {
 			"EGA",
 			AD_ENTRY1("disk1.ega", "e9c9fdd8a19f7910d68e53cb84651273"),
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
@@ -96,7 +97,7 @@ static const LureGameDescription gameDescriptions[] = {
 			"VGA",
 			AD_ENTRY1("disk1.vga", "cf69d5ada228dd74f89046691c16aafb"),
 			Common::IT_ITA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
@@ -109,7 +110,7 @@ static const LureGameDescription gameDescriptions[] = {
 			"EGA",
 			AD_ENTRY1("disk1.ega", "b80aced0321f64c58df2c7d3d74dfe79"),
 			Common::IT_ITA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
@@ -122,7 +123,7 @@ static const LureGameDescription gameDescriptions[] = {
 			"",
 			AD_ENTRY1("disk1.vga", "7aa19e444dab1ac7194d9f7a40ffe54a"),
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
@@ -135,7 +136,7 @@ static const LureGameDescription gameDescriptions[] = {
 			"",
 			AD_ENTRY1("disk1.vga", "894a2c2caeccbad2fc2f4a79a8ee47b0"),
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
@@ -148,7 +149,7 @@ static const LureGameDescription gameDescriptions[] = {
 			"",
 			AD_ENTRY1("disk1.vga", "1c94475c1bb7e0e88c1757d3b5377e94"),
 			Common::FR_FRA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
@@ -161,12 +162,27 @@ static const LureGameDescription gameDescriptions[] = {
 			"",
 			AD_ENTRY1("disk1.vga", "1751145b653959f7a64fe1618d6b97ac"),
 			Common::ES_ESP,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
 		GF_FLOPPY,
 	},
+
+	// Russian OG Edition
+	{
+		{
+			"lure",
+			"",
+			AD_ENTRY1("disk1.vga", "04cdcaa9f0cadca492f7aff0c8adfe06"),
+			Common::RU_RUS,
+			Common::kPlatformDOS,
+			ADGF_NO_FLAGS,
+			GUIO0()
+		},
+		GF_FLOPPY,
+	},
+
 
 	{ AD_TABLE_END_MARKER, 0 }
 };
@@ -177,12 +193,12 @@ class LureMetaEngine : public AdvancedMetaEngine {
 public:
 	LureMetaEngine() : AdvancedMetaEngine(Lure::gameDescriptions, sizeof(Lure::LureGameDescription), lureGames) {
 		_md5Bytes = 1024;
-		_singleid = "lure";
+		_singleId = "lure";
 
 		// Use kADFlagUseExtraAsHint to distinguish between EGA and VGA versions
 		// of italian Lure when their datafiles sit in the same directory.
 		_flags = kADFlagUseExtraAsHint;
-		_guioptions = GUIO1(GUIO_NOSPEECH);
+		_guiOptions = GUIO1(GUIO_NOSPEECH);
 	}
 
 	virtual const char *getName() const {
@@ -226,10 +242,9 @@ SaveStateList LureMetaEngine::listSaves(const char *target) const {
 	Common::SaveFileManager *saveFileMan = g_system->getSavefileManager();
 	Common::StringArray filenames;
 	Common::String saveDesc;
-	Common::String pattern = "lure.???";
+	Common::String pattern = "lure.###";
 
 	filenames = saveFileMan->listSavefiles(pattern);
-	sort(filenames.begin(), filenames.end());	// Sort (hopefully ensuring we are sorted numerically..)
 
 	SaveStateList saveList;
 	for (Common::StringArray::const_iterator file = filenames.begin(); file != filenames.end(); ++file) {
@@ -246,6 +261,8 @@ SaveStateList LureMetaEngine::listSaves(const char *target) const {
 		}
 	}
 
+	// Sort saves based on slot number.
+	Common::sort(saveList.begin(), saveList.end(), SaveStateDescriptorSlotComparator());
 	return saveList;
 }
 

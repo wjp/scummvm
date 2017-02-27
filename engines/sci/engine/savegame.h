@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -37,6 +37,16 @@ struct EngineState;
  *
  * Version - new/changed feature
  * =============================
+ *      40 - always store palvary variables
+ *      39 - Accurate SCI32 arrays/strings, score metadata, avatar metadata
+ *      38 - SCI32 cursor
+ *      37 - Segment entry data changed to pointers
+ *      36 - SCI32 bitmap segment
+ *      35 - SCI32 remap
+ *      34 - SCI32 palettes, and store play time in ticks
+ *      33 - new overridePriority flag in MusicEntry
+ *      32 - new playBed flag in MusicEntry
+ *      31 - priority for sound effects/music is now a signed int16, instead of a byte
  *      30 - synonyms
  *      29 - system strings
  *      28 - heap
@@ -55,7 +65,7 @@ struct EngineState;
  */
 
 enum {
-	CURRENT_SAVEGAME_VERSION = 30,
+	CURRENT_SAVEGAME_VERSION = 40,
 	MINIMUM_SAVEGAME_VERSION = 14
 };
 
@@ -69,8 +79,14 @@ struct SavegameMetadata {
 	uint32 playTime;
 	uint16 gameObjectOffset;
 	uint16 script0Size;
-};
 
+	// Used by Shivers 1
+	uint16 lowScore;
+	uint16 highScore;
+
+	// Used by MGDX
+	uint8 avatarId;
+};
 
 /**
  * Saves a game state to the hard disk in a portable way.
@@ -80,6 +96,12 @@ struct SavegameMetadata {
  * @return 0 on success, 1 otherwise
  */
 bool gamestate_save(EngineState *s, Common::WriteStream *save, const Common::String &savename, const Common::String &version);
+
+// does a delayed saved game restore, used by ScummVM game menu - see detection.cpp / SciEngine::loadGameState()
+void gamestate_delayedrestore(EngineState *s);
+
+// does a few fixups right after restoring a saved game
+void gamestate_afterRestoreFixUp(EngineState *s, int savegameId);
 
 /**
  * Restores a game state from a directory.

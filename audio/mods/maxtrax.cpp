@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -54,7 +54,7 @@ void nullFunc(int) {}
 
 // Function to calculate 2^x, where x is a fixedpoint number with 16 fraction bits
 // using exp would be more accurate and needs less space if mathlibrary is already linked
-// but this function should be faster and doesnt use floats
+// but this function should be faster and doesn't use floats
 #if 1
 inline uint32 pow2Fixed(int32 val) {
 	static const uint16 tablePow2[] = {
@@ -105,7 +105,7 @@ inline uint32 pow2Fixed(int32 val) {
 }
 #endif
 
-}	// End of namespace
+} // End of anonymous namespace
 
 namespace Audio {
 
@@ -211,7 +211,7 @@ void MaxTrax::interrupt() {
 					goto endOfEventLoop;
 
 				case 0xA0: 	// SPECIAL
-					switch (curEvent->stopTime >> 8){
+					switch (curEvent->stopTime >> 8) {
 					case 0x01:	// SPECIAL_SYNC
 						_playerCtx.syncCallBack(curEvent->stopTime & 0xFF);
 						break;
@@ -708,7 +708,7 @@ int8 MaxTrax::noteOn(ChannelContext &channel, const byte note, uint16 volume, ui
 		voiceNum = pickvoice((channel.flags & ChannelContext::kFlagRightChannel) != 0 ? 1 : 0, pri);
 	} else {
 		VoiceContext *voice = ARRAYEND(_voiceCtx);
-		for (voiceNum = ARRAYSIZE(_voiceCtx); voiceNum-- != 0 && --voice->channel != &channel;)
+		for (voiceNum = ARRAYSIZE(_voiceCtx); voiceNum >= 0 && voice->channel != &channel; voiceNum--, voice--)
 			;
 		if (voiceNum < 0)
 			voiceNum = pickvoice((channel.flags & ChannelContext::kFlagRightChannel) != 0 ? 1 : 0, pri);
@@ -1032,6 +1032,6 @@ void MaxTrax::outPutEvent(const Event &ev, int num) {}
 void MaxTrax::outPutScore(const Score &sc, int num) {}
 #endif	// #ifndef NDEBUG
 
-}	// End of namespace Audio
+} // End of namespace Audio
 
 #endif // #if defined(AUDIO_MODS_MAXTRAX_H)

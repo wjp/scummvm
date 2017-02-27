@@ -134,7 +134,7 @@ void QuickTimeAudioDecoder::init() {
 			_audioTracks.push_back(new QuickTimeAudioTrack(this, _tracks[i]));
 }
 
-Common::QuickTimeParser::SampleDesc *QuickTimeAudioDecoder::readSampleDesc(Track *track, uint32 format) {
+Common::QuickTimeParser::SampleDesc *QuickTimeAudioDecoder::readSampleDesc(Track *track, uint32 format, uint32 descSize) {
 	if (track->codecType == CODEC_TYPE_AUDIO) {
 		debug(0, "Audio Codec FourCC: \'%s\'", tag2str(format));
 
@@ -195,7 +195,7 @@ QuickTimeAudioDecoder::QuickTimeAudioTrack::QuickTimeAudioTrack(QuickTimeAudioDe
 
 	if (entry->getCodecTag() == MKTAG('r', 'a', 'w', ' ') || entry->getCodecTag() == MKTAG('t', 'w', 'o', 's'))
 		_parentTrack->sampleSize = (entry->_bitsPerSample / 8) * entry->_channels;
-	
+
 	// Initialize our edit parser too
 	_curEdit = 0;
 	enterNewEdit(Timestamp());
@@ -241,6 +241,15 @@ void QuickTimeAudioDecoder::QuickTimeAudioTrack::queueAudio(const Timestamp &len
 			// If we have any samples that we need to skip (ie. we seeked into
 			// the middle of a chunk), skip them here.
 			if (_skipSamples != Timestamp()) {
+				if (_skipSamples > chunkLength) {
+					// If the amount we need to skip is greater than the size
+					// of the chunk, just skip it altogether.
+					_curMediaPos = _curMediaPos + chunkLength;
+					_skipSamples = _skipSamples - chunkLength;
+					delete stream;
+					continue;
+				}
+
 				skipSamples(_skipSamples, stream);
 				_curMediaPos = _curMediaPos + _skipSamples;
 				chunkLength = chunkLength - _skipSamples;
@@ -395,9 +404,9 @@ AudioStream *QuickTimeAudioDecoder::QuickTimeAudioTrack::readAudioChunk(uint chu
 }
 
 void QuickTimeAudioDecoder::QuickTimeAudioTrack::skipSamples(const Timestamp &length, AudioStream *stream) {
-	uint32 sampleCount = length.convertToFramerate(getRate()).totalNumberOfFrames();
+	int32 sampleCount = length.convertToFramerate(getRate()).totalNumberOfFrames();
 
-	if (sampleCount == 0)
+	if (sampleCount <= 0)
 		return;
 
 	if (isStereo())
@@ -414,8 +423,15 @@ void QuickTimeAudioDecoder::QuickTimeAudioTrack::skipSamples(const Timestamp &le
 }
 
 void QuickTimeAudioDecoder::QuickTimeAudioTrack::findEdit(const Timestamp &position) {
-	for (_curEdit = 0; _curEdit < _parentTrack->editCount - 1 && position > Timestamp(0, _parentTrack->editList[_curEdit].timeOffset, _decoder->_timeScale); _curEdit++)
-		;
+	// Go through the edits look for where we find out we need to be. As long
+	// as the position is >= to the edit's start time, it is considered to be in that
+	// edit. seek() already figured out if we reached the last edit, so we don't need
+	// to handle that case here.
+	for (_curEdit = 0; _curEdit < _parentTrack->editCount - 1; _curEdit++) {
+		Timestamp nextEditTime(0, _parentTrack->editList[_curEdit + 1].timeOffset, _decoder->_timeScale);
+		if (position < nextEditTime)
+			break;
+	}
 
 	enterNewEdit(position);
 }
@@ -426,7 +442,7 @@ void QuickTimeAudioDecoder::QuickTimeAudioTrack::enterNewEdit(const Timestamp &p
 	// If we're at the end of the edit list, there's nothing else for us to do here
 	if (allDataRead())
 		return;
-	
+
 	// For an empty edit, we may need to adjust the start time
 	if (_parentTrack->editList[_curEdit].mediaTime == -1) {
 		// Just invalidate the current media position (and make sure the scale
@@ -585,7 +601,7 @@ bool QuickTimeAudioDecoder::AudioSampleDesc::isAudioCodecSupported() const {
 
 	if (_codecTag == MKTAG('m', 'p', '4', 'a')) {
 		Common::String audioType;
-		switch (_parentTrack->objectTypeMP4) {
+		switch (_objectTypeMP4) {
 		case 0x40: // AAC
 #ifdef USE_FAAD
 			return true;
@@ -643,13 +659,13 @@ void QuickTimeAudioDecoder::AudioSampleDesc::initCodec() {
 	switch (_codecTag) {
 	case MKTAG('Q', 'D', 'M', '2'):
 #ifdef AUDIO_QDM2_H
-		_codec = makeQDM2Decoder(_parentTrack->extraData);
+		_codec = makeQDM2Decoder(_extraData);
 #endif
 		break;
 	case MKTAG('m', 'p', '4', 'a'):
 #ifdef USE_FAAD
-		if (_parentTrack->objectTypeMP4 == 0x40)
-			_codec = makeAACDecoder(_parentTrack->extraData);
+		if (_objectTypeMP4 == 0x40)
+			_codec = makeAACDecoder(_extraData);
 #endif
 		break;
 	default:

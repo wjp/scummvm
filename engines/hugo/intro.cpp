@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -29,9 +29,13 @@
 
 #include "common/system.h"
 #include "common/textconsole.h"
+#include "graphics/font.h"
+#include "graphics/pixelformat.h"
 
 #include "hugo/hugo.h"
 #include "hugo/intro.h"
+#include "hugo/file.h"
+#include "hugo/game.h"
 #include "hugo/util.h"
 #include "hugo/display.h"
 #include "hugo/sound.h"
@@ -39,8 +43,10 @@
 
 namespace Hugo {
 
-IntroHandler::IntroHandler(HugoEngine *vm) : _vm(vm), _introX(0), _introY(0) {
+IntroHandler::IntroHandler(HugoEngine *vm) : _vm(vm) {
 	_introXSize = 0;
+	_introTicks = 0;
+	_introX = _introY = nullptr;
 }
 
 IntroHandler::~IntroHandler() {
@@ -73,9 +79,11 @@ void IntroHandler::loadIntroData(Common::SeekableReadStream &in) {
 void IntroHandler::freeIntroData() {
 	free(_introX);
 	free(_introY);
+	_introX = _introY = nullptr;
 }
 
 intro_v1d::intro_v1d(HugoEngine *vm) : IntroHandler(vm) {
+	_introState = 0;
 }
 
 intro_v1d::~intro_v1d() {
@@ -87,11 +95,7 @@ void intro_v1d::preNewGame() {
 void intro_v1d::introInit() {
 	_introState = 0;
 	_introTicks = 0;
-	_surf.w = 320;
-	_surf.h = 200;
-	_surf.pixels = _vm->_screen->getFrontBuffer();
-	_surf.pitch = 320;
-	_surf.format = Graphics::PixelFormat::createFormatCLUT8();
+	_surf.init(320, 200, 320, _vm->_screen->getFrontBuffer(), Graphics::PixelFormat::createFormatCLUT8());
 	_vm->_screen->displayList(kDisplayInit);
 }
 
@@ -241,11 +245,7 @@ void intro_v2d::preNewGame() {
 void intro_v2d::introInit() {
 	_vm->_screen->displayList(kDisplayInit);
 	_vm->_file->readBackground(_vm->_numScreens - 1); // display splash screen
-	_surf.w = 320;
-	_surf.h = 200;
-	_surf.pixels = _vm->_screen->getFrontBuffer();
-	_surf.pitch = 320;
-	_surf.format = Graphics::PixelFormat::createFormatCLUT8();
+	_surf.init(320, 200, 320, _vm->_screen->getFrontBuffer(), Graphics::PixelFormat::createFormatCLUT8());
 
 	char buffer[128];
 
@@ -287,11 +287,7 @@ void intro_v3d::preNewGame() {
 void intro_v3d::introInit() {
 	_vm->_screen->displayList(kDisplayInit);
 	_vm->_file->readBackground(_vm->_numScreens - 1); // display splash screen
-	_surf.w = 320;
-	_surf.h = 200;
-	_surf.pixels = _vm->_screen->getFrontBuffer();
-	_surf.pitch = 320;
-	_surf.format = Graphics::PixelFormat::createFormatCLUT8();
+	_surf.init(320, 200, 320, _vm->_screen->getFrontBuffer(), Graphics::PixelFormat::createFormatCLUT8());
 
 	char buffer[128];
 	if (_vm->_boot._registered)

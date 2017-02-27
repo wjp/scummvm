@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -140,6 +140,21 @@ DialogueManager::DialogueManager(Parallaction *vm, ZonePtr z) : _vm(vm), _z(z) {
 
 	_cmdList = 0;
 	_answerId = 0;
+
+	_faceId = 0;
+
+	_q = NULL;
+	memset(_visAnswers, 0, sizeof(_visAnswers));
+	_numVisAnswers = 0;
+
+	_selection = _oldSelection = 0;
+
+	_isKeyDown = false;
+	_downKey = 0;
+
+	_mouseButtons = 0;
+
+	_state = DIALOGUE_START;
 }
 
 void DialogueManager::start() {
@@ -192,7 +207,7 @@ void DialogueManager::transitionToState(DialogueState newState) {
 bool DialogueManager::testAnswerFlags(Answer *a) {
 	uint32 flags = _vm->getLocationFlags();
 	if (a->_yesFlags & kFlagsGlobal)
-		flags = _globalFlags | kFlagsGlobal;
+		flags = g_globalFlags | kFlagsGlobal;
 	return ((a->_yesFlags & flags) == a->_yesFlags) && ((a->_noFlags & ~flags) == a->_noFlags);
 }
 
@@ -238,7 +253,7 @@ int16 DialogueManager::selectAnswerN() {
 
 	_selection = _balloonMan->hitTestDialogueBalloon(_mousePos.x, _mousePos.y);
 
-	VisibleAnswer *oldAnswer = &_visAnswers[_oldSelection];
+	VisibleAnswer *oldAnswer = (_oldSelection == NO_ANSWER_SELECTED) ? NULL : &_visAnswers[_oldSelection];
 	VisibleAnswer *answer = &_visAnswers[_selection];
 
 	if (_selection != _oldSelection) {
@@ -370,9 +385,9 @@ protected:
 	bool			_askPassword;
 
 	bool checkPassword() {
-		return ((!scumm_stricmp(_vm->_char.getBaseName(), _doughName) && _vm->_password.hasPrefix("1732461")) ||
-			   (!scumm_stricmp(_vm->_char.getBaseName(), _donnaName) && _vm->_password.hasPrefix("1622")) ||
-			   (!scumm_stricmp(_vm->_char.getBaseName(), _dinoName) && _vm->_password.hasPrefix("179")));
+		return ((!scumm_stricmp(_vm->_char.getBaseName(), g_doughName) && _vm->_password.hasPrefix("1732461")) ||
+			   (!scumm_stricmp(_vm->_char.getBaseName(), g_donnaName) && _vm->_password.hasPrefix("1622")) ||
+			   (!scumm_stricmp(_vm->_char.getBaseName(), g_dinoName) && _vm->_password.hasPrefix("179")));
 	}
 
 	void resetPassword() {
@@ -412,7 +427,8 @@ protected:
 	}
 
 public:
-	DialogueManager_ns(Parallaction_ns *vm, ZonePtr z) : DialogueManager(vm, z), _vm(vm) {
+	DialogueManager_ns(Parallaction_ns *vm, ZonePtr z) : DialogueManager(vm, z), _vm(vm),
+		_passwordChanged(false), _askPassword(false) {
 		_ballonPos._questionBalloon = Common::Point(140, 10);
 		_ballonPos._questionChar = Common::Point(190, 80);
 		_ballonPos._answerChar = Common::Point(10, 80);

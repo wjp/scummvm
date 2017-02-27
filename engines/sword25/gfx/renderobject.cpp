@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -48,6 +48,8 @@
 
 namespace Sword25 {
 
+int RenderObject::_nextGlobalVersion = 0;
+
 RenderObject::RenderObject(RenderObjectPtr<RenderObject> parentPtr, TYPES type, uint handle) :
 	_managerPtr(0),
 	_parentPtr(parentPtr),
@@ -65,21 +67,22 @@ RenderObject::RenderObject(RenderObjectPtr<RenderObject> parentPtr, TYPES type, 
 	_type(type),
 	_initSuccess(false),
 	_refreshForced(true),
-	_handle(0) {
+	_handle(0),
+	_version(++_nextGlobalVersion),
+	_isSolid(false) {
 
-	// Renderobject registrieren, abhängig vom Handle-Parameter entweder mit beliebigem oder vorgegebenen Handle.
 	if (handle == 0)
 		_handle = RenderObjectRegistry::instance().registerObject(this);
 	else
 		_handle = RenderObjectRegistry::instance().registerObject(this, handle);
 
 	if (_handle == 0)
-		return;
+		error("Failed to initialize RenderObject()");
 
 	updateAbsolutePos();
 
-	// Dieses Objekt zu den Kindern der Elternobjektes hinzufügen, falls nicht Wurzel (ParentPtr ungültig) und dem
-	// selben RenderObjektManager zuweisen.
+	// Add this item to the children of the parent object, if not root (ParentPtr is invalid),
+	// assign to the same RenderObjectManager.
 	if (_parentPtr.isValid()) {
 		_managerPtr = _parentPtr->getManager();
 		_parentPtr->addObject(this->getHandle());
@@ -96,44 +99,63 @@ RenderObject::RenderObject(RenderObjectPtr<RenderObject> parentPtr, TYPES type, 
 }
 
 RenderObject::~RenderObject() {
-	// Objekt aus dem Elternobjekt entfernen.
+	// Remove object from its parent.
 	if (_parentPtr.isValid())
 		_parentPtr->detatchChildren(this->getHandle());
 
 	deleteAllChildren();
 
-	// Objekt deregistrieren.
 	RenderObjectRegistry::instance().deregisterObject(this);
 }
 
-bool RenderObject::render() {
-	// Objektänderungen validieren
+void RenderObject::preRender(RenderObjectQueue *renderQueue) {
 	validateObject();
 
-	// Falls das Objekt nicht sichtbar ist, muss gar nichts gezeichnet werden
 	if (!_visible)
-		return true;
+		return;
 
-	// Falls notwendig, wird die Renderreihenfolge der Kinderobjekte aktualisiert.
+	// If necessary, update the children rendering order of the updated objects.
 	if (_childChanged) {
 		sortRenderObjects();
 		_childChanged = false;
 	}
 
-	// Objekt zeichnen.
-	doRender();
+	renderQueue->add(this);
 
-	// Dann müssen die Kinder gezeichnet werden
 	RENDEROBJECT_ITER it = _children.begin();
 	for (; it != _children.end(); ++it)
-		if (!(*it)->render())
+		(*it)->preRender(renderQueue);
+
+}
+
+bool RenderObject::render(RectangleList *updateRects, const Common::Array<int> &updateRectsMinZ) {
+
+	// Falls das Objekt nicht sichtbar ist, muss gar nichts gezeichnet werden
+	if (!_visible)
+		return true;
+
+	// Objekt zeichnen.
+	bool needRender = false;
+	int index = 0;
+
+	// Only draw if the bounding box intersects any update rectangle and
+	// the object is in front of the minimum Z value.
+	for (RectangleList::iterator rectIt = updateRects->begin(); !needRender && rectIt != updateRects->end(); ++rectIt, ++index)
+		needRender = (_bbox.contains(*rectIt) || _bbox.intersects(*rectIt)) && getAbsoluteZ() >= updateRectsMinZ[index];
+
+	if (needRender)
+		doRender(updateRects);
+
+	// Draw all children
+	RENDEROBJECT_ITER it = _children.begin();
+	for (; it != _children.end(); ++it)
+		if (!(*it)->render(updateRects, updateRectsMinZ))
 			return false;
 
 	return true;
 }
 
 void RenderObject::validateObject() {
-	// Die Veränderungen in den Objektvariablen aufheben
 	_oldBbox = _bbox;
 	_oldVisible = _visible;
 	_oldX = _x;
@@ -143,20 +165,21 @@ void RenderObject::validateObject() {
 }
 
 bool RenderObject::updateObjectState() {
-	// Falls sich das Objekt verändert hat, muss der interne Zustand neu berechnet werden und evtl. Update-Regions für den nächsten Frame
-	// registriert werden.
+	// If the object has changed, the internal state must be recalculated and possibly
+	// update Regions be registered for the next frame.
 	if ((calcBoundingBox() != _oldBbox) ||
 	        (_visible != _oldVisible) ||
 	        (_x != _oldX) ||
 	        (_y != _oldY) ||
 	        (_z != _oldZ) ||
 	        _refreshForced) {
-		// Renderrang des Objektes neu bestimmen, da sich dieser verändert haben könnte
 		if (_parentPtr.isValid())
 			_parentPtr->signalChildChange();
 
 		// Die Bounding-Box neu berechnen und Update-Regions registrieren.
 		updateBoxes();
+
+		++_version;
 
 		// Änderungen Validieren
 		validateObject();
@@ -172,12 +195,10 @@ bool RenderObject::updateObjectState() {
 }
 
 void RenderObject::updateBoxes() {
-	// Bounding-Box aktualisieren
 	_bbox = calcBoundingBox();
 }
 
 Common::Rect RenderObject::calcBoundingBox() const {
-	// Die Bounding-Box mit der Objektgröße initialisieren.
 	Common::Rect bbox(0, 0, _width, _height);
 
 	// Die absolute Position der Bounding-Box berechnen.
@@ -191,28 +212,34 @@ Common::Rect RenderObject::calcBoundingBox() const {
 	return bbox;
 }
 
-void RenderObject::calcAbsolutePos(int &x, int &y) const {
+void RenderObject::calcAbsolutePos(int32 &x, int32 &y, int32 &z) const {
 	x = calcAbsoluteX();
 	y = calcAbsoluteY();
+	z = calcAbsoluteZ();
 }
 
-int RenderObject::calcAbsoluteX() const {
+int32 RenderObject::calcAbsoluteX() const {
 	if (_parentPtr.isValid())
 		return _parentPtr->getAbsoluteX() + _x;
 	else
 		return _x;
 }
 
-int RenderObject::calcAbsoluteY() const {
+int32 RenderObject::calcAbsoluteY() const {
 	if (_parentPtr.isValid())
 		return _parentPtr->getAbsoluteY() + _y;
 	else
 		return _y;
 }
 
+int32 RenderObject::calcAbsoluteZ() const {
+	if (_parentPtr.isValid())
+		return _parentPtr->getAbsoluteZ() + _z;
+	else
+		return _z;
+}
+
 void RenderObject::deleteAllChildren() {
-	// Es ist nicht notwendig die Liste zu iterieren, da jedes Kind für sich DetatchChildren an diesem Objekt aufruft und sich somit
-	// selber entfernt. Daher muss immer nur ein beliebiges Element (hier das letzte) gelöscht werden, bis die Liste leer ist.
 	while (!_children.empty()) {
 		RenderObjectPtr<RenderObject> curPtr = _children.back();
 		curPtr.erase();
@@ -225,10 +252,10 @@ bool RenderObject::addObject(RenderObjectPtr<RenderObject> pObject) {
 		return false;
 	}
 
-	// Objekt in die Kinderliste einfügen.
+	// Insert Object in the children list.
 	_children.push_back(pObject);
 
-	// Sicherstellen, dass vor dem nächsten Rendern die Renderreihenfolge aktualisiert wird.
+	// Make sure that before the next render the channel order is updated.
 	if (_parentPtr.isValid())
 		_parentPtr->signalChildChange();
 
@@ -253,7 +280,7 @@ void RenderObject::sortRenderObjects() {
 }
 
 void RenderObject::updateAbsolutePos() {
-	calcAbsolutePos(_absoluteX, _absoluteY);
+	calcAbsolutePos(_absoluteX, _absoluteY, _absoluteZ);
 
 	RENDEROBJECT_ITER it = _children.begin();
 	for (; it != _children.end(); ++it)
@@ -285,8 +312,10 @@ void RenderObject::setY(int y) {
 void RenderObject::setZ(int z) {
 	if (z < 0)
 		error("Tried to set a negative Z value (%d).", z);
-	else
+	else {
 		_z = z;
+		updateAbsolutePos();
+	}
 }
 
 void RenderObject::setVisible(bool visible) {
@@ -361,7 +390,7 @@ RenderObjectPtr<Text> RenderObject::addText(const Common::String &font, const Co
 
 bool RenderObject::persist(OutputPersistenceBlock &writer) {
 	// Typ und Handle werden als erstes gespeichert, damit beim Laden ein Objekt vom richtigen Typ mit dem richtigen Handle erzeugt werden kann.
-	writer.write(static_cast<uint>(_type));
+	writer.write(static_cast<uint32>(_type));
 	writer.write(_handle);
 
 	// Restliche Objekteigenschaften speichern.
@@ -375,14 +404,14 @@ bool RenderObject::persist(OutputPersistenceBlock &writer) {
 	writer.write(_visible);
 	writer.write(_childChanged);
 	writer.write(_initSuccess);
-	writer.write(_bbox.left);
-	writer.write(_bbox.top);
-	writer.write(_bbox.right);
-	writer.write(_bbox.bottom);
-	writer.write(_oldBbox.left);
-	writer.write(_oldBbox.top);
-	writer.write(_oldBbox.right);
-	writer.write(_oldBbox.bottom);
+	writer.write((int32)_bbox.left);
+	writer.write((int32)_bbox.top);
+	writer.write((int32)_bbox.right);
+	writer.write((int32)_bbox.bottom);
+	writer.write((int32)_oldBbox.left);
+	writer.write((int32)_oldBbox.top);
+	writer.write((int32)_oldBbox.right);
+	writer.write((int32)_oldBbox.bottom);
 	writer.write(_oldX);
 	writer.write(_oldY);
 	writer.write(_oldZ);
@@ -417,7 +446,7 @@ bool RenderObject::unpersist(InputPersistenceBlock &reader) {
 	reader.read(_oldY);
 	reader.read(_oldZ);
 	reader.read(_oldVisible);
-	uint parentHandle;
+	uint32 parentHandle;
 	reader.read(parentHandle);
 	_parentPtr = RenderObjectPtr<RenderObject>(parentHandle);
 	reader.read(_refreshForced);
@@ -432,7 +461,7 @@ bool RenderObject::persistChildren(OutputPersistenceBlock &writer) {
 	bool result = true;
 
 	// Kinderanzahl speichern.
-	writer.write(_children.size());
+	writer.write((uint32)_children.size());
 
 	// Rekursiv alle Kinder speichern.
 	RENDEROBJECT_LIST::iterator it = _children.begin();
@@ -448,13 +477,13 @@ bool RenderObject::unpersistChildren(InputPersistenceBlock &reader) {
 	bool result = true;
 
 	// Kinderanzahl einlesen.
-	uint childrenCount;
+	uint32 childrenCount;
 	reader.read(childrenCount);
 	if (!reader.isGood())
 		return false;
 
 	// Alle Kinder rekursiv wieder herstellen.
-	for (uint i = 0; i < childrenCount; ++i) {
+	for (uint32 i = 0; i < childrenCount; ++i) {
 		if (!recreatePersistedRenderObject(reader).isValid())
 			return false;
 	}
@@ -466,8 +495,8 @@ RenderObjectPtr<RenderObject> RenderObject::recreatePersistedRenderObject(InputP
 	RenderObjectPtr<RenderObject> result;
 
 	// Typ und Handle auslesen.
-	uint type;
-	uint handle;
+	uint32 type;
+	uint32 handle;
 	reader.read(type);
 	reader.read(handle);
 	if (!reader.isGood())

@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -25,12 +25,13 @@
 
 #include "common/str.h"
 #include "sci/engine/segment.h"
+#include "sci/engine/script_patches.h"
 
 namespace Sci {
 
 struct EngineState;
 class ResourceManager;
-struct SciScriptSignature;
+struct SciScriptPatcherEntry;
 
 enum ScriptObjectTypes {
 	SCI_OBJ_TERMINATOR,
@@ -47,6 +48,21 @@ enum ScriptObjectTypes {
 };
 
 typedef Common::HashMap<uint16, Object> ObjMap;
+
+enum ScriptOffsetEntryTypes {
+	SCI_SCR_OFFSET_TYPE_OBJECT = 0, // classes are handled by this type as well
+	SCI_SCR_OFFSET_TYPE_STRING,
+	SCI_SCR_OFFSET_TYPE_SAID
+};
+
+struct offsetLookupArrayEntry {
+	uint16    type;       // type of entry
+	uint16    id;         // id of this type, first item inside script data is 1, second item is 2, etc.
+	uint32    offset;     // offset of entry within script resource data
+	uint16    stringSize; // size of string, including terminating [NUL]
+};
+
+typedef Common::Array<offsetLookupArrayEntry> offsetLookupArrayType;
 
 class Script : public SegmentObj {
 private:
@@ -65,6 +81,8 @@ private:
 	const byte *_synonyms; /**< Synonyms block or 0 if not present */
 	uint16 _numSynonyms; /**< Number of entries in the synonyms block */
 
+	int _codeOffset; /**< The absolute offset of the VM code block */
+
 	int _localsOffset;
 	uint16 _localsCount;
 
@@ -73,6 +91,14 @@ private:
 	LocalVariables *_localsBlock;
 
 	ObjMap _objects;	/**< Table for objects, contains property variables */
+
+protected:
+	offsetLookupArrayType _offsetLookupArray; // Table of all elements of currently loaded script, that may get pointed to
+
+private:
+	uint16 _offsetLookupObjectCount;
+	uint16 _offsetLookupStringCount;
+	uint16 _offsetLookupSaidCount;
 
 public:
 	int getLocalsOffset() const { return _localsOffset; }
@@ -96,11 +122,7 @@ public:
 	~Script();
 
 	void freeScript();
-	void load(int script_nr, ResourceManager *resMan);
-
-	void matchSignatureAndPatch(uint16 scriptNr, byte *scriptData, const uint32 scriptSize);
-	int32 findSignature(const SciScriptSignature *signature, const byte *scriptData, const uint32 scriptSize);
-	void applyPatch(const uint16 *patch, byte *scriptData, const uint32 scriptSize, int32 signatureOffset);
+	void load(int script_nr, ResourceManager *resMan, ScriptPatcher *scriptPatcher);
 
 	virtual bool isValidOffset(uint16 offset) const;
 	virtual SegmentRef dereference(reg_t pointer);
@@ -244,12 +266,20 @@ public:
 	 * Resolve a relocation in an SCI3 script
 	 * @param offset        The offset to relocate from
 	 */
-	int relocateOffsetSci3(uint32 offset);
+	int relocateOffsetSci3(uint32 offset) const;
 
 	/**
 	 * Gets an offset to the beginning of the code block in a SCI3 script
 	 */
 	int getCodeBlockOffsetSci3() { return READ_SCI11ENDIAN_UINT32(_buf); }
+
+	/**
+	 * Get the offset array
+	 */
+	const offsetLookupArrayType *getOffsetArray() { return &_offsetLookupArray; };
+	uint16 getOffsetObjectCount() { return _offsetLookupObjectCount; };
+	uint16 getOffsetStringCount() { return _offsetLookupStringCount; };
+	uint16 getOffsetSaidCount() { return _offsetLookupSaidCount; };
 
 private:
 	/**
@@ -297,6 +327,11 @@ private:
 	void initializeObjectsSci3(SegManager *segMan, SegmentId segmentId);
 
 	LocalVariables *allocLocalsSegment(SegManager *segMan);
+
+	/**
+	 * Identifies certain offsets within script data and set up lookup-table
+	 */
+	void identifyOffsets();
 };
 
 } // End of namespace Sci

@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -380,8 +380,7 @@ RawScript::RawScript(const FWScriptInfo &info, const byte *data, uint16 s) :
  * Copy constructor
  */
 RawScript::RawScript(const RawScript &src) : _size(src._size),
-	_data(new byte[_size + 1]), _labels(src._labels) {
-
+	_data(new byte[src._size + 1]), _labels(src._labels) {
 	assert(_data);
 	memcpy(_data, src._data, _size + 1);
 }
@@ -1381,6 +1380,12 @@ int FWScript::o1_loadBg() {
 
 	debugC(5, kCineDebugScript, "Line: %d: loadBg(\"%s\")", _line, param);
 
+	if (g_cine->getGameType() == GType_FW && (g_cine->getFeatures() & GF_CD)) {
+		char buffer[20];
+		removeExtention(buffer, param);
+		g_sound->setBgMusic(atoi(buffer + 1));
+	}
+
 	loadBg(param);
 	g_cine->_bgIncrustList.clear();
 	bgVar0 = 0;
@@ -1420,19 +1425,19 @@ int FWScript::o1_loadNewPrcName() {
 	switch (param1) {
 	case 0:
 		debugC(5, kCineDebugScript, "Line: %d: loadPrc(\"%s\")", _line, param2);
-		strcpy(newPrcName, param2);
+		Common::strlcpy(newPrcName, param2, sizeof(newPrcName));
 		break;
 	case 1:
 		debugC(5, kCineDebugScript, "Line: %d: loadRel(\"%s\")", _line, param2);
-		strcpy(newRelName, param2);
+		Common::strlcpy(newRelName, param2, sizeof(newRelName));
 		break;
 	case 2:
 		debugC(5, kCineDebugScript, "Line: %d: loadObject(\"%s\")", _line, param2);
-		strcpy(newObjectName, param2);
+		Common::strlcpy(newObjectName, param2, sizeof(newObjectName));
 		break;
 	case 3:
 		debugC(5, kCineDebugScript, "Line: %d: loadMsg(\"%s\")", _line, param2);
-		strcpy(newMsgName, param2);
+		Common::strlcpy(newMsgName, param2, sizeof(newMsgName));
 		break;
 	}
 	return 0;
@@ -1727,7 +1732,7 @@ int FWScript::o1_loadMusic() {
 	debugC(5, kCineDebugScript, "Line: %d: loadMusic(%s)", _line, param);
 	g_sound->loadMusic(param);
 
-	strncpy(currentDatName, param, 30);
+	Common::strlcpy(currentDatName, param, 30);
 	musicIsPlaying = 0;
 
 	return 0;
@@ -1853,7 +1858,9 @@ int FWScript::o1_playSample() {
 		if (g_cine->getGameType() == Cine::GType_OS && size == 0) {
 			return 0;
 		}
-		g_sound->stopMusic();
+		// The DOS CD version of Future Wars uses CD audio for music
+		if (!(g_cine->getGameType() == Cine::GType_FW && (g_cine->getFeatures() & GF_CD)))
+			g_sound->stopMusic();
 		if (size == 0xFFFF) {
 			g_sound->playSound(channel, 0, data, 0, 0, 0, volume, 0);
 		} else {
@@ -1868,7 +1875,7 @@ int FWScript::o1_playSampleSwapped() {
 	// since the only stereo output it supports should be the Roland MT-32.
 	// So it probably does the same as o1_playSample here. Checking this will
 	// be a good idea never the less.
-	if (g_cine->getPlatform() == Common::kPlatformPC) {
+	if (g_cine->getPlatform() == Common::kPlatformDOS) {
 		return o1_playSample();
 	}
 

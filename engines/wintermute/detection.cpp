@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -28,6 +28,7 @@
 #include "common/error.h"
 #include "common/fs.h"
 #include "common/util.h"
+#include "common/translation.h"
 
 #include "engines/metaengine.h"
 
@@ -49,17 +50,44 @@ static ADGameDescription s_fallbackDesc = {
 	ADGF_UNSTABLE,
 	GUIO0()
 };
+
+static const ADExtraGuiOptionsMap gameGuiOptions[] = {
+	{
+		GAMEOPTION_SHOW_FPS,
+		{
+			_s("Show FPS-counter"),
+			_s("Show the current number of frames per second in the upper left corner"),
+			"show_fps",
+			false
+		},
+	},
+
+	{
+		GAMEOPTION_BILINEAR,
+		{
+			_s("Sprite bilinear filtering (SLOW)"),
+			_s("Apply bilinear filtering to individual sprites"),
+			"bilinear_filtering",
+			false
+		}
+	},
+
+	AD_EXTRA_GUI_OPTIONS_TERMINATOR
+};
+
 static char s_fallbackGameIdBuf[256];
 
 static const char *directoryGlobs[] = {
 	"language", // To detect the various languages
+	"languages", // To detect the various languages
 	0
 };
 
 class WintermuteMetaEngine : public AdvancedMetaEngine {
 public:
-	WintermuteMetaEngine() : AdvancedMetaEngine(Wintermute::gameDescriptions, sizeof(ADGameDescription), Wintermute::wintermuteGames) {
-		_singleid = "wintermute";
+	WintermuteMetaEngine() : AdvancedMetaEngine(Wintermute::gameDescriptions, sizeof(WMEGameDescription), Wintermute::wintermuteGames, gameGuiOptions) {
+		_singleId = "wintermute";
+		_guiOptions = GUIO3(GUIO_NOMIDI, GAMEOPTION_SHOW_FPS, GAMEOPTION_BILINEAR);
 		_maxScanDepth = 2;
 		_directoryGlobs = directoryGlobs;
 	}
@@ -68,7 +96,7 @@ public:
 	}
 
 	virtual const char *getOriginalCopyright() const {
-		return "Copyright (c) 2011 Jan Nedoma";
+		return "Copyright (C) 2011 Jan Nedoma";
 	}
 
 	virtual const ADGameDescription *fallbackDetect(const FileMap &allFiles, const Common::FSList &fslist) const {
@@ -77,8 +105,8 @@ public:
 		s_fallbackDesc.language = Common::UNK_LANG;
 		s_fallbackDesc.flags = ADGF_UNSTABLE;
 		s_fallbackDesc.platform = Common::kPlatformWindows; // default to Windows
-		s_fallbackDesc.gameid = "wintermute";
-		s_fallbackDesc.guioptions = GUIO0();
+		s_fallbackDesc.gameId = "wintermute";
+		s_fallbackDesc.guiOptions = GUIO0();
 
 		if (allFiles.contains("data.dcp")) {
 			Common::String name, caption;
@@ -90,11 +118,11 @@ public:
 					}
 				}
 				// Prefix to avoid collisions with actually known games
-				name = "wmefan-" + name;
+				name = "wmeunk-" + name;
 				Common::strlcpy(s_fallbackGameIdBuf, name.c_str(), sizeof(s_fallbackGameIdBuf) - 1);
-				s_fallbackDesc.gameid = s_fallbackGameIdBuf;
+				s_fallbackDesc.gameId = s_fallbackGameIdBuf;
 				if (caption != name) {
-					caption += " (fangame) ";
+					caption += " (unknown version) ";
 					char *offset = s_fallbackGameIdBuf + name.size() + 1;
 					uint32 remainingLength = (sizeof(s_fallbackGameIdBuf) - 1) - (name.size() + 1);
 					Common::strlcpy(offset, caption.c_str(), remainingLength);
@@ -110,8 +138,8 @@ public:
 	virtual bool createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const {
 		assert(syst);
 		assert(engine);
-
-		*engine = new Wintermute::WintermuteEngine(syst, desc);
+		const WMEGameDescription *gd = (const WMEGameDescription *)desc;
+		*engine = new Wintermute::WintermuteEngine(syst, gd);
 		return true;
 	}
 
@@ -165,10 +193,10 @@ public:
 	}
 };
 
-} // end of namespace Wintermute
+} // End of namespace Wintermute
 
 #if PLUGIN_ENABLED_DYNAMIC(WINTERMUTE)
-REGISTER_PLUGIN_DYNAMIC(WINTERMUTE, PLUGIN_TYPE_ENGINE, Wintermute::WintermuteMetaEngine);
+	REGISTER_PLUGIN_DYNAMIC(WINTERMUTE, PLUGIN_TYPE_ENGINE, Wintermute::WintermuteMetaEngine);
 #else
-REGISTER_PLUGIN_STATIC(WINTERMUTE, PLUGIN_TYPE_ENGINE, Wintermute::WintermuteMetaEngine);
+	REGISTER_PLUGIN_STATIC(WINTERMUTE, PLUGIN_TYPE_ENGINE, Wintermute::WintermuteMetaEngine);
 #endif

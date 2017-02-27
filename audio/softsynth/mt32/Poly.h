@@ -1,5 +1,5 @@
 /* Copyright (C) 2003, 2004, 2005, 2006, 2008, 2009 Dean Beeler, Jerome Fisher
- * Copyright (C) 2011 Dean Beeler, Jerome Fisher, Sergey V. Mikayev
+ * Copyright (C) 2011-2016 Dean Beeler, Jerome Fisher, Sergey V. Mikayev
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Lesser General Public License as published by
@@ -18,16 +18,14 @@
 #ifndef MT32EMU_POLY_H
 #define MT32EMU_POLY_H
 
+#include "globals.h"
+#include "internals.h"
+
 namespace MT32Emu {
 
 class Part;
-
-enum PolyState {
-	POLY_Playing,
-	POLY_Held, // This marks keys that have been released on the keyboard, but are being held by the pedal
-	POLY_Releasing,
-	POLY_Inactive
-};
+class Partial;
+struct PatchCache;
 
 class Poly {
 private:
@@ -41,14 +39,16 @@ private:
 
 	Partial *partials[4];
 
+	Poly *next;
+
 public:
-	Poly(Part *part);
+	Poly();
+	void setPart(Part *usePart);
 	void reset(unsigned int key, unsigned int velocity, bool sustain, Partial **partials);
 	bool noteOff(bool pedalHeld);
 	bool stopPedalHold();
 	bool startDecay();
 	bool startAbort();
-	void terminate();
 
 	void backupCacheToPartials(PatchCache cache[4]);
 
@@ -60,8 +60,11 @@ public:
 	bool isActive() const;
 
 	void partialDeactivated(Partial *partial);
-};
 
-}
+	Poly *getNext() const;
+	void setNext(Poly *poly);
+}; // class Poly
 
-#endif /* POLY_H_ */
+} // namespace MT32Emu
+
+#endif // #ifndef MT32EMU_POLY_H

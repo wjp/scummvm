@@ -8,22 +8,22 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  */
 
-#ifndef VIDEO_AVI_PLAYER_H
-#define VIDEO_AVI_PLAYER_H
+#ifndef VIDEO_AVI_DECODER_H
+#define VIDEO_AVI_DECODER_H
 
-#include "common/endian.h"
+#include "common/array.h"
 #include "common/rational.h"
 #include "common/rect.h"
 #include "common/str.h"
@@ -32,7 +32,8 @@
 #include "audio/mixer.h"
 
 namespace Audio {
-class QueuingAudioStream;
+class AudioStream;
+class PacketizedAudioStream;
 }
 
 namespace Common {
@@ -43,19 +44,26 @@ namespace Graphics {
 struct PixelFormat;
 }
 
-namespace Video {
-
+namespace Image {
 class Codec;
+}
+
+namespace Video {
 
 /**
  * Decoder for AVI videos.
  *
  * Video decoder used in engines:
  *  - sci
+ *  - sword1
+ *  - sword2
+ *  - titanic
+ *  - zvision
  */
 class AVIDecoder : public VideoDecoder {
 public:
 	AVIDecoder(Audio::Mixer::SoundType soundType = Audio::Mixer::kPlainSoundType);
+	AVIDecoder(const Common::Rational &frameRateOverride, Audio::Mixer::SoundType soundType = Audio::Mixer::kPlainSoundType);
 	virtual ~AVIDecoder();
 
 	bool loadStream(Common::SeekableReadStream *stream);
@@ -63,10 +71,28 @@ public:
 	uint16 getWidth() const { return _header.width; }
 	uint16 getHeight() const { return _header.height; }
 
-protected:
-	 void readNextPacket();
+	bool rewind();
+	bool isRewindable() const { return true; }
+	bool isSeekable() const;
 
-private:
+	const Graphics::Surface *decodeNextTransparency();
+protected:
+	// VideoDecoder API
+	void readNextPacket();
+	bool seekIntern(const Audio::Timestamp &time);
+	bool supportsAudioTrackSwitching() const { return true; }
+	AudioTrack *getAudioTrack(int index);
+
+	/**
+	 * Define a track to be used by this class.
+	 *
+	 * The pointer is then owned by this base class.
+	 *
+	 * @param track The track to add
+	 * @param isExternal Is this an external track not found by loadStream()?
+	 */
+	void addTrack(Track *track, bool isExternal = false);
+
 	struct BitmapInfoHeader {
 		uint32 size;
 		uint32 width;
@@ -99,13 +125,10 @@ private:
 	};
 
 	struct OldIndex {
+		uint32 id;
+		uint32 flags;
+		uint32 offset;
 		uint32 size;
-		struct Index {
-			uint32 id;
-			uint32 flags;
-			uint32 offset;
-			uint32 size;
-		} *indices;
 	};
 
 	// Index Flags
@@ -153,25 +176,59 @@ private:
 		uint32 quality;
 		uint32 sampleSize;
 		Common::Rect frame;
+		Common::String name;
 	};
 
 	class AVIVideoTrack : public FixedRateVideoTrack {
 	public:
-		AVIVideoTrack(int frameCount, const AVIStreamHeader &streamHeader, const BitmapInfoHeader &bitmapInfoHeader);
+		AVIVideoTrack(int frameCount, const AVIStreamHeader &streamHeader, const BitmapInfoHeader &bitmapInfoHeader, byte *initialPalette = 0);
 		~AVIVideoTrack();
 
 		void decodeFrame(Common::SeekableReadStream *stream);
+		void forceTrackEnd();
 
 		uint16 getWidth() const { return _bmInfo.width; }
 		uint16 getHeight() const { return _bmInfo.height; }
+		uint16 getBitCount() const { return _bmInfo.bitCount; }
 		Graphics::PixelFormat getPixelFormat() const;
 		int getCurFrame() const { return _curFrame; }
 		int getFrameCount() const { return _frameCount; }
+		Common::String &getName() { return _vidsHeader.name; }
 		const Graphics::Surface *decodeNextFrame() { return _lastFrame; }
-		const byte *getPalette() const { _dirtyPalette = false; return _palette; }
-		bool hasDirtyPalette() const { return _dirtyPalette; }
-		void markPaletteDirty() { _dirtyPalette = true; }
 
+		const byte *getPalette() const;
+		bool hasDirtyPalette() const;
+		void setCurFrame(int frame) { _curFrame = frame; }
+		void loadPaletteFromChunk(Common::SeekableReadStream *chunk);
+		void useInitialPalette();
+		bool canDither() const;
+		void setDither(const byte *palette);
+
+		bool isTruemotion1() const;
+		void forceDimensions(uint16 width, uint16 height);
+
+		bool isRewindable() const { return true; }
+		bool rewind();
+
+		/**
+		 * Set the video track to play in reverse or forward.
+		 *
+		 * By default, a VideoTrack must decode forward.
+		 *
+		 * @param reverse true for reverse, false for forward
+		 * @return true for success, false for failure
+		 */
+		virtual bool setReverse(bool reverse);
+
+		/**
+		 * Is the video track set to play in reverse?
+		 */
+		virtual bool isReversed() const { return _reversed; }
+
+		/**
+		 * Returns true if at the end of the video track
+		 */
+		virtual bool endOfTrack() const;
 	protected:
 		Common::Rational getFrameRate() const { return Common::Rational(_vidsHeader.rate, _vidsHeader.scale); }
 
@@ -179,12 +236,14 @@ private:
 		AVIStreamHeader _vidsHeader;
 		BitmapInfoHeader _bmInfo;
 		byte _palette[3 * 256];
+		byte *_initialPalette;
 		mutable bool _dirtyPalette;
 		int _frameCount, _curFrame;
+		bool _reversed;
 
-		Codec *_videoCodec;
+		Image::Codec *_videoCodec;
 		const Graphics::Surface *_lastFrame;
-		Codec *createCodec();
+		Image::Codec *createCodec();
 	};
 
 	class AVIAudioTrack : public AudioTrack {
@@ -192,38 +251,94 @@ private:
 		AVIAudioTrack(const AVIStreamHeader &streamHeader, const PCMWaveFormat &waveFormat, Audio::Mixer::SoundType soundType);
 		~AVIAudioTrack();
 
-		void queueSound(Common::SeekableReadStream *stream);
+		virtual void createAudioStream();
+		virtual void queueSound(Common::SeekableReadStream *stream);
 		Audio::Mixer::SoundType getSoundType() const { return _soundType; }
+		void skipAudio(const Audio::Timestamp &time, const Audio::Timestamp &frameTime);
+		virtual void resetStream();
+		uint32 getCurChunk() const { return _curChunk; }
+		Common::String &getName() { return _audsHeader.name; }
+		void setCurChunk(uint32 chunk) { _curChunk = chunk; }
+
+		bool isRewindable() const { return true; }
+		bool rewind();
 
 	protected:
-		Audio::AudioStream *getAudioStream() const;
+		Audio::AudioStream *getAudioStream() const { return _audioStream; }
 
-	private:
 		// Audio Codecs
 		enum {
 			kWaveFormatNone = 0,
 			kWaveFormatPCM = 1,
-			kWaveFormatDK3 = 98
+			kWaveFormatMSADPCM = 2,
+			kWaveFormatMSIMAADPCM = 17,
+			kWaveFormatMP3 = 85,
+			kWaveFormatDK3 = 98		// rogue format number
 		};
 
 		AVIStreamHeader _audsHeader;
 		PCMWaveFormat _wvInfo;
 		Audio::Mixer::SoundType _soundType;
-		Audio::QueuingAudioStream *_audStream;
-		Audio::QueuingAudioStream *createAudioStream();
+		Audio::AudioStream *_audioStream;
+		Audio::PacketizedAudioStream *_packetStream;
+		uint32 _curChunk;
 	};
 
-	OldIndex _ixInfo;
-	AVIHeader _header;	
+	struct TrackStatus {
+		TrackStatus();
+
+		Track *track;
+		uint32 index;
+		uint32 chunkSearchOffset;
+	};
+
+	class IndexEntries : public Common::Array<OldIndex> {
+	public:
+		OldIndex *find(uint index, uint frameNumber);
+	};
+
+	AVIHeader _header;
+
+	void readOldIndex(uint32 size);
+	IndexEntries _indexEntries;
 
 	Common::SeekableReadStream *_fileStream;
 	bool _decodedHeader;
+	bool _foundMovieList;
+	uint32 _movieListStart, _movieListEnd;
 
 	Audio::Mixer::SoundType _soundType;
+	Common::Rational _frameRateOverride;
 
-	void runHandle(uint32 tag);
-	void handleList();
-	void handleStreamHeader();
+	int _videoTrackCounter, _audioTrackCounter;
+	Track *_lastAddedTrack;
+
+	void initCommon();
+
+	bool parseNextChunk();
+	void skipChunk(uint32 size);
+	void handleList(uint32 listSize);
+	void handleStreamHeader(uint32 size);
+	void readStreamName(uint32 size);
+	uint16 getStreamType(uint32 tag) const { return tag & 0xFFFF; }
+	static byte getStreamIndex(uint32 tag);
+	void checkTruemotion1();
+	uint getVideoTrackOffset(uint trackIndex, uint frameNumber = 0);
+
+	void handleNextPacket(TrackStatus& status);
+	bool shouldQueueAudio(TrackStatus& status);
+	Common::Array<TrackStatus> _videoTracks, _audioTracks;
+
+public:
+	virtual AVIAudioTrack *createAudioTrack(AVIStreamHeader sHeader, PCMWaveFormat wvInfo);
+
+	/**
+	 * Seek to a given frame.
+	 *
+	 * This only works when the video track(s) supports getFrameTime().
+	 * This calls seek() internally.
+	 */
+	virtual bool seekToFrame(uint frame);
 };
 
 } // End of namespace Video

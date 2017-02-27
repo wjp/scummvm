@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -68,7 +68,7 @@ bool uncompress(byte *dst, unsigned long *dstLen, const byte *src, unsigned long
  * @param dst       the buffer to store into.
  * @param dstLen    the size of the destination buffer.
  * @param src       the data to be decompressed.
- * @param dstLen    the size of the compressed data.
+ * @param srcLen    the size of the compressed data.
  * @param dict      (optional) a decompress dictionary.
  * @param dictLen   (optional) the size of the dictionary.
  *                  Mandatory if dict is not 0.
@@ -90,7 +90,7 @@ bool inflateZlibHeaderless(byte *dst, uint dstLen, const byte *src, uint srcLen,
  * @param dst       the buffer to store into.
  * @param dstLen    the size of the destination buffer.
  * @param src       the data to be decompressed.
- * @param dstLen    the size of the compressed data.
+ * @param srcLen    the size of the compressed data.
  *
  * @return true on success (Z_OK or Z_STREAM_END), false otherwise.
  */
@@ -103,7 +103,9 @@ bool inflateZlibInstallShield(byte *dst, uint dstLen, const byte *src, uint srcL
  * provides transparent on-the-fly decompression. Assumes the data it
  * retrieves from the wrapped stream to be either uncompressed or in gzip
  * format. In the former case, the original stream is returned unmodified
- * (and in particular, not wrapped).
+ * (and in particular, not wrapped). In the latter case the stream is
+ * returned wrapped, unless there is no ZLIB support, then NULL is returned
+ * and the old stream is destroyed.
  *
  * Certain GZip-formats don't supply an easily readable length, if you
  * still need the length carried along with the stream, and you know
@@ -114,7 +116,7 @@ bool inflateZlibInstallShield(byte *dst, uint dstLen, const byte *src, uint srcL
  * returned).
  *
  * @param toBeWrapped	the stream to be wrapped (if it is in gzip-format)
- * @param knownSize		a supplied length of the compressed data (if not available directly) 
+ * @param knownSize		a supplied length of the compressed data (if not available directly)
  */
 SeekableReadStream *wrapCompressedReadStream(SeekableReadStream *toBeWrapped, uint32 knownSize = 0);
 
@@ -129,6 +131,6 @@ SeekableReadStream *wrapCompressedReadStream(SeekableReadStream *toBeWrapped, ui
  */
 WriteStream *wrapCompressedWriteStream(WriteStream *toBeWrapped);
 
-}	// End of namespace Common
+} // End of namespace Common
 
 #endif

@@ -52,7 +52,7 @@
 
 namespace Sword2 {
 
-MemoryManager::MemoryManager(Sword2Engine *vm) : _vm(vm) {
+MemoryManager::MemoryManager() {
 	// The id stack contains all the possible ids for the memory blocks.
 	// We use this to ensure that no two blocks ever have the same id.
 
@@ -225,7 +225,7 @@ void MemoryManager::memFree(byte *ptr) {
 	int16 idx = findExactPointerInIndex(ptr);
 
 	if (idx == -1) {
-		warning("Freeing non-allocated pointer %p", ptr);
+		warning("Freeing non-allocated pointer %p", (void *)ptr);
 		return;
 	}
 

@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #include "common/rect.h"
@@ -78,7 +79,7 @@ bool EditableWidget::tryInsertChar(byte c, int pos) {
 
 void EditableWidget::handleTickle() {
 	uint32 time = g_system->getMillis();
-	if (_caretTime < time) {
+	if (_caretTime < time && isEnabled()) {
 		_caretTime = time + kCaretBlinkTime;
 		drawCaret(_caretVisible);
 	}
@@ -88,6 +89,9 @@ bool EditableWidget::handleKeyDown(Common::KeyState state) {
 	bool handled = true;
 	bool dirty = false;
 	bool forcecaret = false;
+
+	if (!isEnabled())
+		return false;
 
 	// First remove caret
 	if (_caretVisible)
@@ -181,6 +185,21 @@ bool EditableWidget::handleKeyDown(Common::KeyState state) {
 		forcecaret = true;
 		break;
 
+	case Common::KEYCODE_v:
+		if (g_system->hasFeature(OSystem::kFeatureClipboardSupport) && state.flags & Common::KBD_CTRL) {
+			if (g_system->hasTextInClipboard()) {
+				String text = g_system->getTextFromClipboard();
+				for (uint32 i = 0; i < text.size(); ++i) {
+					if (tryInsertChar(text[i], _caretPos))
+						++_caretPos;
+				}
+				dirty = true;
+			}
+		} else {
+			defaultKeyDownHandler(state, dirty, forcecaret, handled);
+		}
+		break;
+
 #ifdef MACOSX
 	// Let ctrl-a / ctrl-e move the caret to the start / end of the line.
 	//
@@ -261,23 +280,45 @@ void EditableWidget::drawCaret(bool erase) {
 	int x = editRect.left;
 	int y = editRect.top;
 
-	x += getCaretOffset();
+	const int caretOffset = getCaretOffset();
+	x += caretOffset;
 
-	if (y < 0 || y + editRect.height() - 2 >= _h)
+	if (y < 0 || y + editRect.height() > _h)
 		return;
 
 	x += getAbsX();
 	y += getAbsY();
 
-	g_gui.theme()->drawCaret(Common::Rect(x, y, x + 1, y + editRect.height() - 2), erase);
+	g_gui.theme()->drawCaretClip(Common::Rect(x, y, x + 1, y + editRect.height()), getBossClipRect(), erase);
 
 	if (erase) {
+		GUI::EditableWidget::String character;
+		int width;
+
 		if ((uint)_caretPos < _editString.size()) {
-			GUI::EditableWidget::String chr(_editString[_caretPos]);
-			int chrWidth = g_gui.getCharWidth(_editString[_caretPos], _font);
+			const byte chr = _editString[_caretPos];
+			width = g_gui.getCharWidth(chr, _font);
+			character = chr;
+
 			const uint last = (_caretPos > 0) ? _editString[_caretPos - 1] : 0;
-			x += g_gui.getKerningOffset(last, _editString[_caretPos], _font);
-			g_gui.theme()->drawText(Common::Rect(x, y, x + chrWidth, y + editRect.height() - 2), chr, _state, Graphics::kTextAlignLeft, _inversion, 0, false, _font);
+			x += g_gui.getKerningOffset(last, chr, _font);
+		} else {
+			// We draw a fake space here to assure that removing the caret
+			// does not result in color glitches in case the edit rect is
+			// drawn with an inversion.
+			width = g_gui.getCharWidth(' ', _font);
+			character = " ";
+		}
+
+		// TODO: Right now we manually prevent text from being drawn outside
+		// the edit area here. We might want to consider to use
+		// setTextDrawableArea for this. However, it seems that only
+		// EditTextWidget uses that but not ListWidget. Thus, one should check
+		// whether we can unify the drawing in the text area first to avoid
+		// possible glitches due to different methods used.
+		width = MIN(editRect.width() - caretOffset, width);
+		if (width > 0) {
+			g_gui.theme()->drawTextClip(Common::Rect(x, y, x + width, y + editRect.height()), getBossClipRect(), character, _state, Graphics::kTextAlignLeft, _inversion, 0, false, _font, ThemeEngine::kFontColorNormal, true, _textDrawableArea);
 		}
 	}
 

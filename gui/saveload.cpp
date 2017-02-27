@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #include "common/config-manager.h"
@@ -24,7 +25,6 @@
 
 #include "gui/saveload.h"
 #include "gui/saveload-dialog.h"
-#include "gui/gui-manager.h"
 
 #include "engines/metaengine.h"
 
@@ -86,6 +86,10 @@ int SaveLoadChooser::runModalWithPluginAndTarget(const EnginePlugin *plugin, con
 	selectChooser(**plugin);
 	if (!_impl)
 		return -1;
+
+#if defined(USE_CLOUD) && defined(USE_LIBCURL)
+	_impl->runSaveSync(ConfMan.hasKey("savepath", target));
+#endif
 
 	// Set up the game domain as newly active domain, so
 	// target specific savepath will be checked

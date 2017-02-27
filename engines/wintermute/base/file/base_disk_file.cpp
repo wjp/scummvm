@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -29,6 +29,7 @@
 #include "engines/wintermute/dcgf.h"
 #include "engines/wintermute/base/file/base_disk_file.h"
 #include "engines/wintermute/base/base_file_manager.h"
+#include "engines/wintermute/utils/path_util.h"
 #include "common/stream.h"
 #include "common/memstream.h"
 #include "common/file.h"
@@ -37,12 +38,13 @@
 #include "common/tokenizer.h"
 #include "common/config-manager.h"
 
+
 namespace Wintermute {
 
-void correctSlashes(char *fileName) {
-	for (size_t i = 0; i < strlen(fileName); i++) {
+void correctSlashes(Common::String &fileName) {
+	for (size_t i = 0; i < fileName.size(); i++) {
 		if (fileName[i] == '\\') {
-			fileName[i] = '/';
+			fileName.setChar('/', i);
 		}
 	}
 }
@@ -109,14 +111,32 @@ bool diskFileExists(const Common::String &filename) {
 
 Common::SeekableReadStream *openDiskFile(const Common::String &filename) {
 	uint32 prefixSize = 0;
-	Common::SeekableReadStream *file = NULL;
+	Common::SeekableReadStream *file = nullptr;
 	Common::String fixedFilename = filename;
+	correctSlashes(fixedFilename);
 
-	// Absolute path: TODO: Add specific fallbacks here.
-	if (filename.contains(':')) {
-		if (filename.hasPrefix("c:\\windows\\fonts\\")) { // East Side Story refers to "c:\windows\fonts\framd.ttf"
-			fixedFilename = filename.c_str() + 17;
-		} else {
+	// HACK: There are a few games around which mistakenly refer to absolute paths in the scripts.
+	// The original interpreter on Windows usually simply ignores them when it can't find them.
+	// We try to turn the known ones into relative paths.
+	if (fixedFilename.contains(':')) {
+		const char* const knownPrefixes[] = { // Known absolute paths
+				"c:/windows/fonts/", // East Side Story refers to "c:\windows\fonts\framd.ttf"
+				"c:/carol6/svn/data/", // Carol Reed 6: Black Circle refers to "c:\carol6\svn\data\sprites\system\help.png"
+				"f:/dokument/spel 5/demo/data/" // Carol Reed 5 (non-demo) refers to "f:\dokument\spel 5\demo\data\scenes\credits\op_cred_00\op_cred_00.jpg"
+		};
+
+		bool matched = false;
+
+		for (uint i = 0; i < ARRAYSIZE(knownPrefixes); i++) {
+			if (fixedFilename.hasPrefix(knownPrefixes[i])) {
+				fixedFilename = fixedFilename.c_str() + strlen(knownPrefixes[i]);
+				matched = true;
+			}
+		}
+
+		if (!matched) {
+			// fixedFilename is unchanged and thus still broken, none of the above workarounds worked.
+			// We can only bail out
 			error("openDiskFile::Absolute path or invalid filename used in %s", filename.c_str());
 		}
 	}
@@ -125,14 +145,14 @@ Common::SeekableReadStream *openDiskFile(const Common::String &filename) {
 	SearchMan.listMatchingMembers(files, fixedFilename);
 
 	for (Common::ArchiveMemberList::iterator it = files.begin(); it != files.end(); ++it) {
-		if ((*it)->getName() == filename) {
+		if ((*it)->getName().equalsIgnoreCase(lastPathComponent(fixedFilename,'/'))) {
 			file = (*it)->createReadStream();
 			break;
 		}
 	}
 	// File wasn't found in SearchMan, try to parse the path as a relative path.
 	if (!file) {
-		Common::FSNode searchNode = getNodeForRelativePath(filename);
+		Common::FSNode searchNode = getNodeForRelativePath(PathUtil::normalizeFileName(filename));
 		if (searchNode.exists() && !searchNode.isDirectory() && searchNode.isReadable()) {
 			file = searchNode.createReadStream();
 		}
@@ -148,7 +168,8 @@ Common::SeekableReadStream *openDiskFile(const Common::String &filename) {
 		}
 
 		if (compressed) {
-			uint32 dataOffset, compSize, uncompSize;
+			uint32 dataOffset, compSize;
+			unsigned long uncompSize;
 			dataOffset = file->readUint32LE();
 			compSize = file->readUint32LE();
 			uncompSize = file->readUint32LE();
@@ -157,7 +178,7 @@ Common::SeekableReadStream *openDiskFile(const Common::String &filename) {
 			if (!compBuffer) {
 				error("Error allocating memory for compressed file '%s'", filename.c_str());
 				delete file;
-				return NULL;
+				return nullptr;
 			}
 
 			byte *data = new byte[uncompSize];
@@ -165,23 +186,21 @@ Common::SeekableReadStream *openDiskFile(const Common::String &filename) {
 				error("Error allocating buffer for file '%s'", filename.c_str());
 				delete[] compBuffer;
 				delete file;
-				return NULL;
+				return nullptr;
 			}
 			file->seek(dataOffset + prefixSize, SEEK_SET);
 			file->read(compBuffer, compSize);
 
-			if (Common::uncompress(data, (unsigned long *)&uncompSize, compBuffer, compSize) != true) {
+			if (Common::uncompress(data, &uncompSize, compBuffer, compSize) != true) {
 				error("Error uncompressing file '%s'", filename.c_str());
 				delete[] compBuffer;
 				delete file;
-				return NULL;
+				return nullptr;
 			}
 
 			delete[] compBuffer;
-
-			return new Common::MemoryReadStream(data, uncompSize, DisposeAfterUse::YES);
 			delete file;
-			file = NULL;
+			return new Common::MemoryReadStream(data, uncompSize, DisposeAfterUse::YES);
 		} else {
 			file->seek(0, SEEK_SET);
 			return file;
@@ -190,7 +209,7 @@ Common::SeekableReadStream *openDiskFile(const Common::String &filename) {
 		return file;
 
 	}
-	return NULL;
+	return nullptr;
 }
 
-} // end of namespace Wintermute
+} // End of namespace Wintermute

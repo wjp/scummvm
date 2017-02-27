@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #ifndef COMMON_PLATFORM_H
@@ -35,8 +36,9 @@ class String;
  * game in question.
  */
 enum Platform {
-	kPlatformPC,
+	kPlatformDOS,
 	kPlatformAmiga,
+	kPlatformAtari8Bit,
 	kPlatformAtariST,
 	kPlatformMacintosh,
 	kPlatformFMTowns,
@@ -49,12 +51,15 @@ enum Platform {
 	kPlatformSegaCD,
 	kPlatform3DO,
 	kPlatformPCEngine,
+	kPlatformApple2,
 	kPlatformApple2GS,
 	kPlatformPC98,
 	kPlatformWii,
 	kPlatformPSX,
 	kPlatformCDi,
 	kPlatformIOS,
+	kPlatformOS2,
+	kPlatformBeOS,
 
 	kPlatformUnknown = -1
 };
@@ -75,6 +80,6 @@ extern const char *getPlatformCode(Platform id);
 extern const char *getPlatformAbbrev(Platform id);
 extern const char *getPlatformDescription(Platform id);
 
-}	// End of namespace Common
+} // End of namespace Common
 
 #endif

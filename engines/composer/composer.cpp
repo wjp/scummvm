@@ -8,26 +8,23 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  */
 #include "common/scummsys.h"
- 
+
 #include "common/config-manager.h"
 #include "common/events.h"
-#include "common/file.h"
 #include "common/random.h"
-#include "common/fs.h"
 #include "common/keyboard.h"
-#include "common/substream.h"
 
 #include "graphics/cursorman.h"
 #include "graphics/surface.h"
@@ -35,19 +32,27 @@
 #include "graphics/wincursor.h"
 
 #include "engines/util.h"
-#include "engines/advancedDetector.h"
-
-#include "audio/audiostream.h"
 
 #include "composer/composer.h"
 #include "composer/graphics.h"
 #include "composer/resource.h"
+#include "composer/console.h"
 
 namespace Composer {
 
 ComposerEngine::ComposerEngine(OSystem *syst, const ComposerGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc) {
 	_rnd = new Common::RandomSource("composer");
 	_audioStream = NULL;
+	_currSoundPriority = 0;
+	_currentTime = 0;
+	_lastTime = 0;
+	_needsUpdate = true;
+	_directoriesToStrip = 1;
+	_mouseVisible = true;
+	_mouseEnabled = false;
+	_mouseSpriteId = 0;
+	_lastButton = NULL;
+	_console = NULL;
 }
 
 ComposerEngine::~ComposerEngine() {
@@ -64,6 +69,7 @@ ComposerEngine::~ComposerEngine() {
 		i->_surface.free();
 
 	delete _rnd;
+	delete _console;
 }
 
 Common::Error ComposerEngine::run() {
@@ -79,12 +85,6 @@ Common::Error ComposerEngine::run() {
 		_queuedScripts[i]._scriptId = 0;
 	}
 
-	_mouseVisible = true;
-	_mouseEnabled = false;
-	_mouseSpriteId = 0;
-	_lastButton = NULL;
-
-	_directoriesToStrip = 1;
 	if (!_bookIni.loadFromFile("book.ini")) {
 		_directoriesToStrip = 0;
 		if (!_bookIni.loadFromFile("programs/book.ini")) {
@@ -102,22 +102,28 @@ Common::Error ComposerEngine::run() {
 	if (_bookIni.hasKey("Height", "Common"))
 		height = atoi(getStringFromConfig("Common", "Height").c_str());
 	initGraphics(width, height, true);
-	_surface.create(width, height, Graphics::PixelFormat::createFormatCLUT8());
-	_needsUpdate = true;
+	_screen.create(width, height, Graphics::PixelFormat::createFormatCLUT8());
 
 	Graphics::Cursor *cursor = Graphics::makeDefaultWinCursor();
 	CursorMan.replaceCursor(cursor->getSurface(), cursor->getWidth(), cursor->getHeight(), cursor->getHotspotX(),
 		cursor->getHotspotY(), cursor->getKeyColor());
 	CursorMan.replaceCursorPalette(cursor->getPalette(), cursor->getPaletteStartIndex(), cursor->getPaletteCount());
+	delete cursor;
+
+	_console = new Console(this);
 
 	loadLibrary(0);
 
-	_currentTime = 0;
-	_lastTime = 0;
-
 	uint fps = atoi(getStringFromConfig("Common", "FPS").c_str());
-	uint frameTime = 1000 / fps;
+	uint frameTime = 125; // Default to 125ms (1000/8)
+	if (fps != 0)
+		frameTime = 1000 / fps;
+	else
+		warning("FPS in book.ini is zero. Defaulting to 8...");
 	uint32 lastDrawTime = 0;
+	_lastSaveTime = _system->getMillis();
+	
+	bool loadFromLauncher = ConfMan.hasKey("save_slot");
 
 	while (!shouldQuit()) {
 		for (uint i = 0; i < _pendingPageChanges.size(); i++) {
@@ -126,7 +132,7 @@ Common::Error ComposerEngine::run() {
 			else
 				loadLibrary(_pendingPageChanges[i]._pageId);
 
-			lastDrawTime = _system->getMillis();
+			lastDrawTime = 0;
 		}
 		_pendingPageChanges.clear();
 
@@ -159,14 +165,20 @@ Common::Error ComposerEngine::run() {
 			else
 				lastDrawTime += frameTime;
 
+			tickOldScripts();
+
 			redraw();
 
-			tickOldScripts();
 			processAnimFrame();
 		} else if (_needsUpdate) {
 			redraw();
 		}
-
+		if (loadFromLauncher) {
+			loadGameState(ConfMan.getInt("save_slot"));
+			loadFromLauncher = false;
+		}
+		if (shouldPerformAutoSave(_lastSaveTime))
+			saveGameState(0, "Autosave");
 		while (_eventMan->pollEvent(event)) {
 			switch (event.type) {
 			case Common::EVENT_LBUTTONDOWN:
@@ -186,11 +198,11 @@ Common::Error ComposerEngine::run() {
 			case Common::EVENT_KEYDOWN:
 				switch (event.kbd.keycode) {
 				case Common::KEYCODE_d:
-					/*if (event.kbd.hasFlags(Common::KBD_CTRL)) {
+					if (event.kbd.hasFlags(Common::KBD_CTRL)) {
 						// Start the debugger
 						getDebugger()->attach();
 						getDebugger()->onFrame();
-					}*/
+					}
 					break;
 
 				case Common::KEYCODE_q:
@@ -212,6 +224,8 @@ Common::Error ComposerEngine::run() {
 
 		_system->delayMillis(20);
 	}
+
+	_screen.free();
 
 	return Common::kNoError;
 }
@@ -373,7 +387,7 @@ void ComposerEngine::loadLibrary(uint id) {
 	}
 
 	Common::String filename;
-
+	Common::String oldGroup = _bookGroup;
 	if (getGameType() == GType_ComposerV1) {
 		if (!id || _bookGroup.empty())
 			filename = getStringFromConfig("Common", "StartPage");
@@ -407,6 +421,7 @@ void ComposerEngine::loadLibrary(uint id) {
 	Library library;
 
 	library._id = id;
+	library._group = oldGroup;
 	library._archive = new ComposerArchive();
 	if (!library._archive->openFile(filename))
 		error("failed to open '%s'", filename.c_str());

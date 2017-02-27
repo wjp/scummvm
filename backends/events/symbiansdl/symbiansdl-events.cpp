@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -56,76 +56,76 @@ bool SymbianSdlEventSource::remapKey(SDL_Event &ev, Common::Event &event) {
 			switch (loop) {
 			case GUI::ACTION_UP:
 				if (ev.type == SDL_KEYDOWN) {
-					_km.y_vel = -1;
+					_km.y_vel = -1 * MULTIPLIER;
 					_km.y_down_count = 1;
 				} else {
-					_km.y_vel = 0;
+					_km.y_vel = 0 * MULTIPLIER;
 					_km.y_down_count = 0;
 				}
 				event.type = Common::EVENT_MOUSEMOVE;
-				processMouseEvent(event, _km.x, _km.y);
+				processMouseEvent(event, _km.x / MULTIPLIER, _km.y / MULTIPLIER);
 
 				return true;
 
 			case GUI::ACTION_DOWN:
 				if (ev.type == SDL_KEYDOWN) {
-					_km.y_vel = 1;
+					_km.y_vel = 1 * MULTIPLIER;
 					_km.y_down_count = 1;
 				} else {
-					_km.y_vel = 0;
+					_km.y_vel = 0 * MULTIPLIER;
 					_km.y_down_count = 0;
 				}
 				event.type = Common::EVENT_MOUSEMOVE;
-				processMouseEvent(event, _km.x, _km.y);
+				processMouseEvent(event, _km.x / MULTIPLIER, _km.y / MULTIPLIER);
 
 				return true;
 
 			case GUI::ACTION_LEFT:
 				if (ev.type == SDL_KEYDOWN) {
-					_km.x_vel = -1;
+					_km.x_vel = -1 * MULTIPLIER;
 					_km.x_down_count = 1;
 				} else {
-					_km.x_vel = 0;
+					_km.x_vel = 0 * MULTIPLIER;
 					_km.x_down_count = 0;
 				}
 				event.type = Common::EVENT_MOUSEMOVE;
-				processMouseEvent(event, _km.x, _km.y);
+				processMouseEvent(event, _km.x / MULTIPLIER, _km.y / MULTIPLIER);
 
 				return true;
 
 			case GUI::ACTION_RIGHT:
 				if (ev.type == SDL_KEYDOWN) {
-					_km.x_vel = 1;
+					_km.x_vel = 1 * MULTIPLIER;
 					_km.x_down_count = 1;
 				} else {
-					_km.x_vel = 0;
+					_km.x_vel = 0 * MULTIPLIER;
 					_km.x_down_count = 0;
 				}
 				event.type = Common::EVENT_MOUSEMOVE;
-				processMouseEvent(event, _km.x, _km.y);
+				processMouseEvent(event, _km.x / MULTIPLIER, _km.y / MULTIPLIER);
 
 				return true;
 
 			case GUI::ACTION_LEFTCLICK:
 				event.type = (ev.type == SDL_KEYDOWN ? Common::EVENT_LBUTTONDOWN : Common::EVENT_LBUTTONUP);
-				processMouseEvent(event, _km.x, _km.y);
+				processMouseEvent(event, _km.x / MULTIPLIER, _km.y / MULTIPLIER);
 
 				return true;
 
 			case GUI::ACTION_RIGHTCLICK:
 				event.type = (ev.type == SDL_KEYDOWN ? Common::EVENT_RBUTTONDOWN : Common::EVENT_RBUTTONUP);
-				processMouseEvent(event, _km.x, _km.y);
+				processMouseEvent(event, _km.x / MULTIPLIER, _km.y / MULTIPLIER);
 
 				return true;
 
 			case GUI::ACTION_ZONE:
 				if (ev.type == SDL_KEYDOWN) {
 					for (int i = 0; i < TOTAL_ZONES; i++)
-						if (_km.x >= _zones[i].x && _km.y >= _zones[i].y &&
-							_km.x <= _zones[i].x + _zones[i].width && _km.y <= _zones[i].y + _zones[i].height
+						if ( (_km.x / MULTIPLIER) >= _zones[i].x && (_km.y / MULTIPLIER) >= _zones[i].y &&
+							(_km.x / MULTIPLIER) <= _zones[i].x + _zones[i].width && (_km.y / MULTIPLIER <= _zones[i].y + _zones[i].height
 							) {
-							_mouseXZone[i] = _km.x;
-							_mouseYZone[i] = _km.y;
+							_mouseXZone[i] = _km.x / MULTIPLIER;
+							_mouseYZone[i] = _km.y / MULTIPLIER;
 							break;
 						}
 						_currentZone++;
@@ -133,7 +133,9 @@ bool SymbianSdlEventSource::remapKey(SDL_Event &ev, Common::Event &event) {
 							_currentZone = 0;
 						event.type = Common::EVENT_MOUSEMOVE;
 						processMouseEvent(event, _mouseXZone[_currentZone], _mouseYZone[_currentZone]);
-						SDL_WarpMouse(event.mouse.x, event.mouse.y);
+						if (_graphicsManager) {
+							_graphicsManager->getWindow()->warpMouseInWindow(event.mouse.x, event.mouse.y);
+						}
 				}
 
 				return true;

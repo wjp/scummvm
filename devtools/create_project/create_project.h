@@ -23,6 +23,10 @@
 #ifndef TOOLS_CREATE_PROJECT_H
 #define TOOLS_CREATE_PROJECT_H
 
+#ifndef __has_feature       // Optional of course.
+#define __has_feature(x) 0  // Compatibility with non-clang compilers.
+#endif
+
 #include <map>
 #include <list>
 #include <string>
@@ -82,6 +86,11 @@ struct EngineDesc {
 	 * Whether the engine should be included in the build or not.
 	 */
 	bool enable;
+	
+	/**
+	 * Features required for this engine.
+	 */
+	StringList requiredFeatures;
 
 	/**
 	 * A list of all available sub engine names. Sub engines are engines
@@ -98,16 +107,17 @@ struct EngineDesc {
 typedef std::list<EngineDesc> EngineDescList;
 
 /**
- * This function parses the project configure file and creates a list
- * of available engines.
+ * This function parses the project directory and creates a list of
+ * available engines.
  *
  * It will also automatically setup the default build state (enabled
- * or disabled) to the state specified in the "configure" file.
+ * or disabled) to the state specified in the individual configure.engine
+ * files.
  *
  * @param srcDir Path to the root of the project source.
  * @return List of available engines.
  */
-EngineDescList parseConfigure(const std::string &srcDir);
+EngineDescList parseEngines(const std::string &srcDir);
 
 /**
  * Checks whether the specified engine is a sub engine. To determine this
@@ -221,15 +231,20 @@ struct BuildSetup {
 
 	StringList defines;   ///< List of all defines for the build.
 	StringList libraries; ///< List of all external libraries required for the build.
+	StringList testDirs;  ///< List of all folders containing tests
 
 	bool devTools;         ///< Generate project files for the tools
+	bool tests;            ///< Generate project files for the tests
 	bool runBuildEvents;   ///< Run build events as part of the build (generate revision number and copy engine/theme data & needed files to the build folder
 	bool createInstaller;  ///< Create NSIS installer after the build
+	bool useSDL2;          ///< Whether to use SDL2 or not.
 
 	BuildSetup() {
 		devTools        = false;
+		tests           = false;
 		runBuildEvents  = false;
 		createInstaller = false;
+		useSDL2         = true;
 	}
 };
 
@@ -254,6 +269,22 @@ struct BuildSetup {
 void NORETURN_PRE error(const std::string &message) NORETURN_POST;
 
 namespace CreateProjectTool {
+
+/**
+ * Structure for describing an FSNode. This is a very minimalistic
+ * description, which includes everything we need.
+ * It only contains the name of the node and whether it is a directory
+ * or not.
+ */
+struct FSNode {
+	FSNode() : name(), isDirectory(false) {}
+	FSNode(const std::string &n, bool iD) : name(n), isDirectory(iD) {}
+
+	std::string name; ///< Name of the file system node
+	bool isDirectory; ///< Whether it is a directory or not
+};
+
+typedef std::list<FSNode> FileList;
 
 /**
  * Gets a proper sequence of \t characters for the given
@@ -292,12 +323,47 @@ std::string convertPathToWin(const std::string &path);
 void splitFilename(const std::string &fileName, std::string &name, std::string &ext);
 
 /**
+ * Returns the basename of a path.
+ * examples:
+ *   a/b/c/d.ext -> d.ext
+ *   d.ext       -> d.ext
+ *
+ * @param fileName Filename
+ * @return The basename
+ */
+std::string basename(const std::string &fileName);
+
+/**
  * Checks whether the given file will produce an object file or not.
  *
  * @param fileName Name of the file.
  * @return "true" when it will produce a file, "false" otherwise.
  */
 bool producesObjectFile(const std::string &fileName);
+
+/**
+* Convert an integer to string
+*
+* @param num the integer to convert
+* @return string representation of the number
+*/
+std::string toString(int num);
+
+/**
+ * Returns a list of all files and directories in the specified
+ * path.
+ *
+ * @param dir Directory which should be listed.
+ * @return List of all children.
+ */
+FileList listDirectory(const std::string &dir);
+
+/**
+ * Create a directory at the given path.
+ *
+ * @param dir The path to create.
+ */
+void createDirectory(const std::string &dir);
 
 /**
  * Structure representing a file tree. This contains two
@@ -339,7 +405,7 @@ public:
 	 *
 	 * @param setup Description of the desired build setup.
 	 */
-	void createProject(const BuildSetup &setup);
+	void createProject(BuildSetup &setup);
 
 	/**
 	 * Returns the last path component.
@@ -369,6 +435,13 @@ protected:
 	 * @param setup Description of the desired build setup.
 	 */
 	virtual void createOtherBuildFiles(const BuildSetup &setup) = 0;
+
+	/**
+	 *  Add resources to the project
+	 *
+	 * @param setup Description of the desired build setup.
+	 */
+	virtual void addResourceFiles(const BuildSetup &setup, StringList &includeList, StringList &excludeList) = 0;
 
 	/**
 	 * Create a project file for the specified list of files.
@@ -430,10 +503,11 @@ protected:
 	 *
 	 * @param moduleDir Path to the module.
 	 * @param defines List of set defines.
+	 * @param testDirs List of folders containing tests.
 	 * @param includeList Reference to a list, where included files should be added.
 	 * @param excludeList Reference to a list, where excluded files should be added.
 	 */
-	void createModuleList(const std::string &moduleDir, const StringList &defines, StringList &includeList, StringList &excludeList) const;
+	void createModuleList(const std::string &moduleDir, const StringList &defines, StringList &testDirs, StringList &includeList, StringList &excludeList) const;
 
 	/**
 	 * Creates an UUID for every enabled engine of the
@@ -448,7 +522,7 @@ protected:
 	 * Creates an UUID for every enabled tool of the
 	 * passed build description.
 	 *
-	 * @return A map, which includes UUIDs for all enabled engines.
+	 * @return A map, which includes UUIDs for all enabled tools.
 	 */
 	UUIDMap createToolsUUIDMap() const;
 
@@ -458,6 +532,15 @@ protected:
 	 * @return A new UUID as string.
 	 */
 	std::string createUUID() const;
+
+private:
+	/**
+	 * This creates the engines/plugins_table.h file required for building
+	 * ScummVM.
+	 *
+	 * @param setup Description of the desired build.
+	 */
+	void createEnginePluginsTable(const BuildSetup &setup);
 };
 
 } // End of CreateProjectTool namespace

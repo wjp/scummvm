@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -430,6 +430,14 @@ static void MouseProcess(CORO_PARAM, const void *) {
 				ProcessButEvent(PLR_DRAG2_END);
 			break;
 
+		case Common::EVENT_WHEELUP:
+			PlayerEvent(PLR_WHEEL_UP, mousePos);
+			break;
+
+		case Common::EVENT_WHEELDOWN:
+			PlayerEvent(PLR_WHEEL_DOWN, mousePos);
+			break;
+
 		default:
 			break;
 		}
@@ -520,8 +528,6 @@ void SetNewScene(SCNHANDLE scene, int entrance, int transition) {
  * Store a scene as hooked
  */
 void SetHookScene(SCNHANDLE scene, int entrance, int transition) {
-	assert(g_HookScene.scene == 0); // scene already hooked
-
 	g_HookScene.scene = scene;
 	g_HookScene.entry = entrance;
 	g_HookScene.trans = transition;
@@ -658,7 +664,7 @@ bool ChangeScene(bool bReset) {
 			default:
 				// Trigger pre-load and fade and start countdown
 				CountOut = COUNTOUT_COUNT;
-				FadeOutFast(NULL);
+				FadeOutFast();
 				if (TinselV2)
 					_vm->_pcmMusic->startFadeOut(COUNTOUT_COUNT);
 				break;
@@ -722,21 +728,20 @@ void LoadBasicChunks() {
 
 	cptr = FindChunk(INV_OBJ_SCNHANDLE, CHUNK_OBJECTS);
 
-#ifdef SCUMM_BIG_ENDIAN
-	//convert to native endianness
+	// Convert to native endianness
 	INV_OBJECT *io = (INV_OBJECT *)cptr;
 	for (int i = 0; i < numObjects; i++, io++) {
-		io->id        = FROM_LE_32(io->id);
-		io->hIconFilm = FROM_LE_32(io->hIconFilm);
-		io->hScript   = FROM_LE_32(io->hScript);
-		io->attribute = FROM_LE_32(io->attribute);
+		io->id        = FROM_32(io->id);
+		io->hIconFilm = FROM_32(io->hIconFilm);
+		io->hScript   = FROM_32(io->hScript);
+		io->attribute = FROM_32(io->attribute);
 	}
-#endif
 
 	RegisterIcons(cptr, numObjects);
 
 	cptr = FindChunk(MASTER_SCNHANDLE, CHUNK_TOTAL_POLY);
-	if (cptr != NULL)
+	// Max polygons are 0 in DW1 Mac (both in the demo and the full version)
+	if (cptr != NULL && *cptr != 0)
 		MaxPolygons(*cptr);
 
 	if (TinselV2) {
@@ -814,27 +819,23 @@ const char *const TinselEngine::_textFiles[][3] = {
 
 
 TinselEngine::TinselEngine(OSystem *syst, const TinselGameDescription *gameDesc) :
-		Engine(syst), _gameDescription(gameDesc), _random("tinsel") {
-	_vm = this;
-
-	_config = new Config(this);
-
+		Engine(syst), _gameDescription(gameDesc), _random("tinsel"),
+		_console(0), _sound(0), _midiMusic(0), _pcmMusic(0), _bmv(0) {
 	// Register debug flags
 	DebugMan.addDebugChannel(kTinselDebugAnimations, "animations", "Animations debugging");
 	DebugMan.addDebugChannel(kTinselDebugActions, "actions", "Actions debugging");
 	DebugMan.addDebugChannel(kTinselDebugSound, "sound", "Sound debugging");
 	DebugMan.addDebugChannel(kTinselDebugMusic, "music", "Music debugging");
 
+	_vm = this;
+
+	_gameId = 0;
+	_driver = NULL;
+
+	_config = new Config(this);
+
 	// Setup mixer
 	syncSoundSettings();
-
-	// Add DW2 subfolder to search path in case user is running directly from the CDs
-	const Common::FSNode gameDataDir(ConfMan.get("path"));
-	SearchMan.addSubDirectoryMatching(gameDataDir, "dw2");
-
-	// Add subfolders needed for psx versions of Discworld 1
-	if (TinselV1PSX)
-		SearchMan.addDirectory(gameDataDir.getPath(), gameDataDir, 0, 3, true);
 
 	const GameSettings *g;
 
@@ -843,16 +844,7 @@ TinselEngine::TinselEngine(OSystem *syst, const TinselGameDescription *gameDesc)
 		if (!scumm_stricmp(g->gameid, gameid))
 			_gameId = g->id;
 
-	int cd_num = ConfMan.getInt("cdrom");
-	if (cd_num >= 0)
-		_system->getAudioCDManager()->openCD(cd_num);
-
-	_midiMusic = new MidiMusicPlayer();
-	_pcmMusic = new PCMMusicPlayer();
-
-	_sound = new SoundManager(this);
-
-	_bmv = new BMVPlayer();
+	_system->getAudioCDManager()->open();
 
 	_mousePos.x = 0;
 	_mousePos.y = 0;
@@ -861,9 +853,6 @@ TinselEngine::TinselEngine(OSystem *syst, const TinselGameDescription *gameDesc)
 }
 
 TinselEngine::~TinselEngine() {
-	if (_bmv->MoviePlaying())
-		_bmv->FinishBMV();
-
 	_system->getAudioCDManager()->stop();
 	delete _bmv;
 	delete _sound;
@@ -888,7 +877,26 @@ Common::String TinselEngine::getSavegameFilename(int16 saveNum) const {
 	return Common::String::format("%s.%03d", getTargetName().c_str(), saveNum);
 }
 
+void TinselEngine::initializePath(const Common::FSNode &gamePath) {
+	if (TinselV1PSX) {
+		// Add subfolders needed for psx versions of Discworld 1
+		SearchMan.addDirectory(gamePath.getPath(), gamePath, 0, 3, true);
+	} else {
+		// Add DW2 subfolder to search path in case user is running directly from the CDs
+		SearchMan.addSubDirectoryMatching(gamePath, "dw2");
+
+		// Location of Miles audio files (sample.ad and sample.opl) in Discworld 1
+		SearchMan.addSubDirectoryMatching(gamePath, "drivers");
+		Engine::initializePath(gamePath);
+	}
+}
+
 Common::Error TinselEngine::run() {
+	_midiMusic = new MidiMusicPlayer(this);
+	_pcmMusic = new PCMMusicPlayer();
+	_sound = new SoundManager(this);
+	_bmv = new BMVPlayer();
+
 	// Initialize backend
 	if (getGameID() == GID_DW2) {
 #ifndef DW2_EXACT_SIZE
@@ -968,7 +976,7 @@ Common::Error TinselEngine::run() {
 		// Check for time to do next game cycle
 		if ((g_system->getMillis() > timerVal + GAME_FRAME_DELAY)) {
 			timerVal = g_system->getMillis();
-			_system->getAudioCDManager()->updateCD();
+			_system->getAudioCDManager()->update();
 			NextGameCycle();
 		}
 
@@ -999,6 +1007,9 @@ Common::Error TinselEngine::run() {
 		else
 			g_system->delayMillis(10);
 	}
+
+	if (_bmv->MoviePlaying())
+		_bmv->FinishBMV();
 
 	// Write configuration
 	_vm->_config->writeToDisk();
@@ -1046,6 +1057,8 @@ bool TinselEngine::pollEvent() {
 	case Common::EVENT_LBUTTONUP:
 	case Common::EVENT_RBUTTONDOWN:
 	case Common::EVENT_RBUTTONUP:
+	case Common::EVENT_WHEELUP:
+	case Common::EVENT_WHEELDOWN:
 		// Add button to queue for the mouse process
 		_mouseButtons.push_back(event.type);
 		break;
@@ -1053,7 +1066,7 @@ bool TinselEngine::pollEvent() {
 	case Common::EVENT_MOUSEMOVE:
 		{
 			// This fragment takes care of Tinsel 2 when it's been compiled with
-			// blank areas at the top and bottom of thes creen
+			// blank areas at the top and bottom of the screen
 			int ySkip = TinselV2 ? (g_system->getHeight() - _vm->screen().h) / 2 : 0;
 			if ((event.mouse.y >= ySkip) && (event.mouse.y < (g_system->getHeight() - ySkip)))
 				_mousePos = Common::Point(event.mouse.x, event.mouse.y - ySkip);

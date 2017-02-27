@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -110,6 +110,16 @@ void ScummEngine::setOwnerOf(int obj, int owner) {
 	// This causes it to try to remove object 0 from the inventory.
 	if (_game.id == GID_PASS && obj == 0 && vm.slot[_currentScript].number == 94)
 		return;
+
+	// WORKAROUND for bug #6802: assert() was triggered in freddi2.
+ 	// Bug is in room 39. Problem is script 10, in the localvar2==78 case;
+	// this only sets the obj id if var198 is non-zero, but in the asserting
+	// case, it is obj 0. That means two setOwnerOf calls are made with obj 0.
+	// The correct setOwnerOf calls are made afterwards, so just ignoring this
+	// seems to work just fine.
+	if (_game.id == GID_HEGAME && obj == 0 && _currentRoom == 39 && vm.slot[_currentScript].number == 10)
+		return;
+
 	assert(obj > 0);
 
 	if (owner == 0) {
@@ -335,7 +345,7 @@ int ScummEngine::whereIsObject(int object) const {
 		return WIO_NOT_FOUND;
 
 	if ((_game.version != 0 || OBJECT_V0_TYPE(object) == 0) &&
-		 _objectOwnerTable[object] != OF_OWNER_ROOM) 
+		 _objectOwnerTable[object] != OF_OWNER_ROOM)
 	{
 		for (i = 0; i < _numInventory; i++)
 			if (_inventory[i] == object)
@@ -433,10 +443,14 @@ void ScummEngine::getObjectXYPos(int object, int &x, int &y, int &dir) {
 			y = od.y_pos + (int16)READ_LE_UINT16(&imhd->old.hotspot[state].y);
 		}
 	} else if (_game.version <= 2) {
-		if (od.actordir) {
-			x = od.walk_x;
-			y = od.walk_y;
-		} else {
+		x = od.walk_x;
+		y = od.walk_y;
+
+		// Adjust x, y when no actor direction is set, but only perform this
+		// adjustment for V0 games (e.g. MM C64), otherwise certain scenes in
+		// newer games are affected as well (e.g. the interior of the Shuttle
+		// Bus scene in Zak V2, where no actor is present). Refer to bug #3526089.
+		if (!od.actordir && _game.version == 0) {
 			x = od.x_pos + od.width / 2;
 			y = od.y_pos + od.height / 2;
 		}
@@ -1009,7 +1023,6 @@ void ScummEngine::resetRoomObject(ObjectData *od, const byte *room, const byte *
 		od->actordir = (byte)READ_LE_UINT16(&imhd->v7.actordir);
 
 	} else if (_game.version == 6) {
-		assert(imhd);
 		od->obj_nr = READ_LE_UINT16(&(cdhd->v6.obj_id));
 
 		od->width = READ_LE_UINT16(&cdhd->v6.w);
@@ -1123,6 +1136,7 @@ void ScummEngine_v80he::clearDrawQueues() {
  */
 void ScummEngine::markObjectRectAsDirty(int obj) {
 	int i, strip;
+	++_V0Delay._objectRedrawCount;
 
 	for (i = 1; i < _numLocalObjects; i++) {
 		if (_objs[i].obj_nr == (uint16)obj) {
@@ -1130,6 +1144,7 @@ void ScummEngine::markObjectRectAsDirty(int obj) {
 				const int minStrip = MAX(_screenStartStrip, _objs[i].x_pos / 8);
 				const int maxStrip = MIN(_screenEndStrip+1, _objs[i].x_pos / 8 + _objs[i].width / 8);
 				for (strip = minStrip; strip < maxStrip; strip++) {
+					++_V0Delay._objectStripRedrawCount;
 					setGfxUsageBit(strip, USAGE_BIT_DIRTY);
 				}
 			}
@@ -1225,7 +1240,7 @@ byte *ScummEngine::getOBCDFromObject(int obj, bool v0CheckInventory) {
 	byte *ptr;
 
 	if ((_game.version != 0 || OBJECT_V0_TYPE(obj) == 0) &&
-		_objectOwnerTable[obj] != OF_OWNER_ROOM) 
+		_objectOwnerTable[obj] != OF_OWNER_ROOM)
 	{
 		if (_game.version == 0 && !v0CheckInventory)
 			return 0;
@@ -1711,7 +1726,7 @@ void ScummEngine_v6::drawBlastObject(BlastObject *eo) {
 		error("object %d is not a blast object", eo->number);
 
 	bdd.dst = *vs;
-	bdd.dst.pixels = vs->getPixels(0, 0);
+	bdd.dst.setPixels(vs->getPixels(0, 0));
 	bdd.x = eo->rect.left;
 	bdd.y = eo->rect.top;
 

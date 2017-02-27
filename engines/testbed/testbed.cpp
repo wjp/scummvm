@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #include "common/debug-channels.h"
@@ -38,6 +39,12 @@
 #include "testbed/savegame.h"
 #include "testbed/sound.h"
 #include "testbed/testbed.h"
+#ifdef USE_LIBCURL
+#include "testbed/cloud.h"
+#endif
+#ifdef USE_SDL_NET
+#include "testbed/webserver.h"
+#endif
 
 namespace Testbed {
 
@@ -133,6 +140,16 @@ TestbedEngine::TestbedEngine(OSystem *syst)
 	// Midi
 	ts = new MidiTestSuite();
 	_testsuiteList.push_back(ts);
+#ifdef USE_LIBCURL
+	// Cloud
+	ts = new CloudTestSuite();
+	_testsuiteList.push_back(ts);
+#endif
+#ifdef USE_SDL_NET
+	// Webserver
+	ts = new WebserverTestSuite();
+	_testsuiteList.push_back(ts);
+#endif
 }
 
 TestbedEngine::~TestbedEngine() {
@@ -150,6 +167,9 @@ void TestbedEngine::invokeTestsuites(TestbedConfigManager &cfMan) {
 	uint count = 1;
 	Common::Point pt = Testsuite::getDisplayRegionCoordinates();
 	int numSuitesEnabled = cfMan.getNumSuitesEnabled();
+
+	if (!numSuitesEnabled)
+		return;
 
 	for (iter = _testsuiteList.begin(); iter != _testsuiteList.end(); iter++) {
 		if (shouldQuit()) {

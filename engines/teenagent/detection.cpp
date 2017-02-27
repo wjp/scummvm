@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #include "common/system.h"
@@ -26,6 +27,7 @@
 #include "base/plugins.h"
 
 #include "engines/advancedDetector.h"
+#include "teenagent/resources.h"
 #include "teenagent/teenagent.h"
 #include "graphics/thumbnail.h"
 
@@ -52,7 +54,7 @@ static const ADGameDescription teenAgentGameDescriptions[] = {
 			{NULL, 0, NULL, 0}
 		},
 		Common::EN_ANY,
-		Common::kPlatformPC,
+		Common::kPlatformDOS,
 		ADGF_NO_FLAGS,
 		GUIO1(GUIO_NOSPEECH)
 	},
@@ -72,7 +74,7 @@ static const ADGameDescription teenAgentGameDescriptions[] = {
 			{NULL, 0, NULL, 0}
 		},
 		Common::CZ_CZE,
-		Common::kPlatformPC,
+		Common::kPlatformDOS,
 		ADGF_CD,
 		GUIO0()
 	},
@@ -86,7 +88,7 @@ enum {
 class TeenAgentMetaEngine : public AdvancedMetaEngine {
 public:
 	TeenAgentMetaEngine() : AdvancedMetaEngine(teenAgentGameDescriptions, sizeof(ADGameDescription), teenAgentGames) {
-		_singleid = "teenagent";
+		_singleId = "teenagent";
 	}
 
 	virtual const char *getName() const {
@@ -123,10 +125,9 @@ public:
 
 	virtual SaveStateList listSaves(const char *target) const {
 		Common::String pattern = target;
-		pattern += ".??";
+		pattern += ".##";
 
 		Common::StringArray filenames = g_system->getSavefileManager()->listSavefiles(pattern);
-		Common::sort(filenames.begin(), filenames.end());
 
 		SaveStateList saveList;
 		for (Common::StringArray::const_iterator file = filenames.begin(); file != filenames.end(); ++file) {
@@ -143,6 +144,8 @@ public:
 				saveList.push_back(SaveStateDescriptor(slot, buf));
 			}
 		}
+		// Sort saves based on slot number.
+		Common::sort(saveList.begin(), saveList.end(), SaveStateDescriptorSlotComparator());
 		return saveList;
 	}
 
@@ -168,7 +171,7 @@ public:
 
 		Common::String desc = buf;
 
-		in->seek(0x777a);
+		in->seek(TeenAgent::saveStateSize);
 		if (!Graphics::checkThumbnailHeader(*in))
 			return SaveStateDescriptor(slot, desc);
 
@@ -183,7 +186,7 @@ public:
 };
 
 #if PLUGIN_ENABLED_DYNAMIC(TEENAGENT)
-REGISTER_PLUGIN_DYNAMIC(TEENAGENT, PLUGIN_TYPE_ENGINE, TeenAgentMetaEngine);
+	REGISTER_PLUGIN_DYNAMIC(TEENAGENT, PLUGIN_TYPE_ENGINE, TeenAgentMetaEngine);
 #else
-REGISTER_PLUGIN_STATIC(TEENAGENT, PLUGIN_TYPE_ENGINE, TeenAgentMetaEngine);
+	REGISTER_PLUGIN_STATIC(TEENAGENT, PLUGIN_TYPE_ENGINE, TeenAgentMetaEngine);
 #endif

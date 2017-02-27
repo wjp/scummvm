@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -24,12 +24,13 @@
 #include "mohawk/riven.h"
 #include "mohawk/riven_external.h"
 #include "mohawk/riven_graphics.h"
-#include "mohawk/sound.h"
+#include "mohawk/riven_sound.h"
 #include "mohawk/video.h"
 
 #include "gui/message.h"
 #include "common/events.h"
 #include "common/system.h"
+#include "common/translation.h"
 
 namespace Mohawk {
 
@@ -209,8 +210,8 @@ void RivenExternal::runCommand(uint16 argc, uint16 *argv) {
 }
 
 void RivenExternal::runDemoBoundaryDialog() {
-	GUI::MessageDialog dialog("Exploration beyond this point available only within the full version of\n"
-							  "the game.");
+	GUI::MessageDialog dialog(_("Exploration beyond this point available only within the full version of\n"
+							  "the game."));
 	dialog.runModal();
 }
 
@@ -229,7 +230,7 @@ void RivenExternal::runCredits(uint16 video, uint32 delay) {
 	VideoHandle videoHandle = _vm->_video->findVideoHandleRiven(video);
 
 	while (!_vm->shouldQuit() && _vm->_gfx->getCurCreditsImage() <= 320) {
-		if (_vm->_video->getCurFrame(videoHandle) >= (int32)_vm->_video->getFrameCount(videoHandle) - 1) {
+		if (videoHandle->getCurFrame() >= (int32)videoHandle->getFrameCount() - 1) {
 			if (nextCreditsFrameStart == 0) {
 				// Set us up to start after delay ms
 				nextCreditsFrameStart = _vm->_system->getMillis() + delay;
@@ -265,10 +266,10 @@ void RivenExternal::runDomeCheck() {
 	// Check if we clicked while the golden frame was showing
 
 	VideoHandle video = _vm->_video->findVideoHandleRiven(1);
-	assert(video != NULL_VID_HANDLE);
+	assert(video);
 
-	int32 curFrame = _vm->_video->getCurFrame(video);
-	int32 frameCount = _vm->_video->getFrameCount(video);
+	int32 curFrame = video->getCurFrame();
+	int32 frameCount = video->getFrameCount();
 
 	// The final frame of the video is the 'golden' frame (double meaning: the
 	// frame that is the magic one is the one with the golden symbol) but we
@@ -405,7 +406,7 @@ void RivenExternal::drawDomeSliders(uint16 startHotspot) {
 
 	// On pspit, the rect is different by two pixels
 	// (alternatively, we could just use hotspot 3 here, but only on pspit is there a hotspot for this)
-	if (_vm->getCurStack() == pspit)
+	if (_vm->getCurStack() == kStackPspit)
 		dstAreaRect.translate(-2, 0);
 
 	// Find out bitmap id
@@ -651,11 +652,11 @@ void RivenExternal::xalaunchbrowser(uint16 argc, uint16 *argv) {
 	//
 	// [YES] [NO]
 
-	GUI::MessageDialog dialog("At this point, the Riven Demo would\n"
+	GUI::MessageDialog dialog(_("At this point, the Riven Demo would\n"
 							  "ask if you would like to open a web browser\n"
 							  "to bring you to the Red Orb store to buy\n"
 							  "the game. ScummVM cannot do that and\n"
-							  "the site no longer exists.");
+							  "the site no longer exists."));
 	dialog.runModal();
 }
 
@@ -857,8 +858,12 @@ void RivenExternal::xbupdateboiler(uint16 argc, uint16 *argv) {
 			_vm->_video->playMovieRiven(7);
 		}
 	} else {
-		_vm->_video->disableMovieRiven(7);
-		_vm->_video->disableMovieRiven(8);
+		VideoHandle handle = _vm->_video->findVideoHandleRiven(7);
+		if (handle)
+			handle->setEnabled(false);
+		handle = _vm->_video->findVideoHandleRiven(8);
+		if (handle)
+			handle->setEnabled(false);
 	}
 }
 
@@ -1149,8 +1154,8 @@ void RivenExternal::lowerPins() {
 
 	// Play the video of the pins going down
 	VideoHandle handle = _vm->_video->playMovieRiven(upMovie);
-	assert(handle != NULL_VID_HANDLE);
-	_vm->_video->setVideoBounds(handle, Audio::Timestamp(0, startTime, 600), Audio::Timestamp(0, startTime + 550, 600));
+	assert(handle);
+	handle->setBounds(Audio::Timestamp(0, startTime, 600), Audio::Timestamp(0, startTime + 550, 600));
 	_vm->_video->waitUntilMovieEnds(handle);
 
 	upMovie = 0;
@@ -1181,8 +1186,8 @@ void RivenExternal::xgrotatepins(uint16 argc, uint16 *argv) {
 
 	// Play the video of the pins rotating
 	VideoHandle handle = _vm->_video->playMovieRiven(_vm->_vars["gupmoov"]);
-	assert(handle != NULL_VID_HANDLE);
-	_vm->_video->setVideoBounds(handle, Audio::Timestamp(0, startTime, 600), Audio::Timestamp(0, startTime + 1215, 600));
+	assert(handle);
+	handle->setBounds(Audio::Timestamp(0, startTime, 600), Audio::Timestamp(0, startTime + 1215, 600));
 	_vm->_video->waitUntilMovieEnds(handle);
 }
 
@@ -1265,9 +1270,9 @@ void RivenExternal::xgpincontrols(uint16 argc, uint16 *argv) {
 
 	// Actually play the movie
 	VideoHandle handle = _vm->_video->playMovieRiven(pinMovieCodes[imagePos - 1]);
-	assert(handle != NULL_VID_HANDLE);
+	assert(handle);
 	uint32 startTime = 9630 - pinPos * 600;
-	_vm->_video->setVideoBounds(handle, Audio::Timestamp(0, startTime, 600), Audio::Timestamp(0, startTime + 550, 600));
+	handle->setBounds(Audio::Timestamp(0, startTime, 600), Audio::Timestamp(0, startTime + 550, 600));
 	_vm->_video->waitUntilMovieEnds(handle);
 
 	// Update the relevant variables
@@ -1343,8 +1348,8 @@ void RivenExternal::xgrviewer(uint16 argc, uint16 *argv) {
 
 	// Now play the movie
 	VideoHandle handle = _vm->_video->playMovieRiven(1);
-	assert(handle != NULL_VID_HANDLE);
-	_vm->_video->setVideoBounds(handle, Audio::Timestamp(0, s_viewerTimeIntervals[curPos], 600), Audio::Timestamp(0, s_viewerTimeIntervals[newPos], 600));
+	assert(handle);
+	handle->setBounds(Audio::Timestamp(0, s_viewerTimeIntervals[curPos], 600), Audio::Timestamp(0, s_viewerTimeIntervals[newPos], 600));
 	_vm->_video->waitUntilMovieEnds(handle);
 
 	// Set the new position and let the card's scripts take over again
@@ -1412,8 +1417,8 @@ void RivenExternal::xglviewer(uint16 argc, uint16 *argv) {
 
 	// Now play the movie
 	VideoHandle handle = _vm->_video->playMovieRiven(1);
-	assert(handle != NULL_VID_HANDLE);
-	_vm->_video->setVideoBounds(handle, Audio::Timestamp(0, s_viewerTimeIntervals[curPos], 600), Audio::Timestamp(0, s_viewerTimeIntervals[newPos], 600));
+	assert(handle);
+	handle->setBounds(Audio::Timestamp(0, s_viewerTimeIntervals[curPos], 600), Audio::Timestamp(0, s_viewerTimeIntervals[newPos], 600));
 	_vm->_video->waitUntilMovieEnds(handle);
 
 	// Set the new position to the variable
@@ -1467,7 +1472,7 @@ static void catherineViewerIdleTimer(MohawkEngine_Riven *vm) {
 	VideoHandle videoHandle = vm->_video->playMovieRiven(30);
 
 	// Reset the timer
-	vm->installTimer(&catherineViewerIdleTimer, vm->_video->getDuration(videoHandle) + vm->_rnd->getRandomNumber(60) * 1000);
+	vm->installTimer(&catherineViewerIdleTimer, videoHandle->getDuration().msecs() + vm->_rnd->getRandomNumber(60) * 1000);
 }
 
 void RivenExternal::xglview_prisonon(uint16 argc, uint16 *argv) {
@@ -1507,7 +1512,7 @@ void RivenExternal::xglview_prisonon(uint16 argc, uint16 *argv) {
 		_vm->_video->activateMLST(cathMovie, _vm->getCurCard());
 		VideoHandle videoHandle = _vm->_video->playMovieRiven(30);
 
-		timeUntilNextMovie = _vm->_video->getDuration(videoHandle) + _vm->_rnd->getRandomNumber(60) * 1000;
+		timeUntilNextMovie = videoHandle->getDuration().msecs() + _vm->_rnd->getRandomNumber(60) * 1000;
 	} else {
 		// Otherwise, just redraw the imager
 		timeUntilNextMovie = _vm->_rnd->getRandomNumberRng(10, 20) * 1000;
@@ -1986,7 +1991,7 @@ void RivenExternal::xschool280_playwhark(uint16 argc, uint16 *argv) {
 	Audio::Timestamp startTime = Audio::Timestamp(0, (11560 / 19) * (*posVar), 600);
 	*posVar += number; // Adjust to the end
 	Audio::Timestamp endTime = Audio::Timestamp(0, (11560 / 19) * (*posVar), 600);
-	_vm->_video->setVideoBounds(handle, startTime, endTime);
+	handle->setBounds(startTime, endTime);
 	_vm->_video->waitUntilMovieEnds(handle);
 
 	if (*posVar > 19) {
@@ -2016,8 +2021,8 @@ void RivenExternal::xorollcredittime(uint16 argc, uint16 *argv) {
 	// WORKAROUND: The special change stuff only handles one destination and it would
 	// be messy to modify the way that currently works. If we use the trap book on Tay,
 	// we should be using the Tay end game sequences.
-	if (_vm->_vars["returnstackid"] == rspit) {
-		_vm->changeToStack(rspit);
+	if (_vm->_vars["returnstackid"] == kStackRspit) {
+		_vm->changeToStack(kStackRspit);
 		_vm->changeToCard(2);
 		return;
 	}
@@ -2059,7 +2064,7 @@ void RivenExternal::xbookclick(uint16 argc, uint16 *argv) {
 	debug(0, "\tHotspot    = %d -> %d", argv[3], hotspotMap[argv[3] - 1]);
 
 	// Just let the video play while we wait until Gehn opens the trap book for us
-	while (_vm->_video->getTime(video) < startTime && !_vm->shouldQuit()) {
+	while (video->getTime() < startTime && !_vm->shouldQuit()) {
 		if (_vm->_video->updateMovies())
 			_vm->_system->updateScreen();
 
@@ -2084,7 +2089,7 @@ void RivenExternal::xbookclick(uint16 argc, uint16 *argv) {
 
 	// OK, Gehn has opened the trap book and has asked us to go in. Let's watch
 	// and see what the player will do...
-	while (_vm->_video->getTime(video) < endTime && !_vm->shouldQuit()) {
+	while (video->getTime() < endTime && !_vm->shouldQuit()) {
 		bool updateScreen = _vm->_video->updateMovies();
 
 		Common::Event event;
@@ -2335,7 +2340,7 @@ static void rebelPrisonWindowTimer(MohawkEngine_Riven *vm) {
 	VideoHandle handle = vm->_video->playMovieRiven(movie);
 
 	// Ensure the next video starts after this one ends
-	uint32 timeUntilNextVideo = vm->_video->getDuration(handle) + vm->_rnd->getRandomNumberRng(38, 58) * 1000;
+	uint32 timeUntilNextVideo = handle->getDuration().msecs() + vm->_rnd->getRandomNumberRng(38, 58) * 1000;
 
 	// Save the time in case we leave the card and return
 	vm->_vars["rvillagetime"] = timeUntilNextVideo + vm->getTotalPlayTime();
@@ -2425,7 +2430,7 @@ void RivenExternal::xtexterior300_telescopedown(uint16 argc, uint16 *argv) {
 			// Play the sound of not being able to move
 			_vm->_cursor->setCursor(kRivenHideCursor);
 			_vm->_system->updateScreen();
-			_vm->_sound->playSoundBlocking(13);
+			_vm->_sound->playSound(13);
 		}
 	} else {
 		// We're not at the bottom, and we can move down again
@@ -2434,7 +2439,7 @@ void RivenExternal::xtexterior300_telescopedown(uint16 argc, uint16 *argv) {
 		static const uint32 timeIntervals[] = { 4320, 3440, 2560, 1760, 880, 0 };
 		uint16 movieCode = telescopeCover ? 1 : 2;
 		VideoHandle handle = _vm->_video->playMovieRiven(movieCode);
-		_vm->_video->setVideoBounds(handle, Audio::Timestamp(0, timeIntervals[telescopePos], 600), Audio::Timestamp(0, timeIntervals[telescopePos - 1], 600));
+		handle->setBounds(Audio::Timestamp(0, timeIntervals[telescopePos], 600), Audio::Timestamp(0, timeIntervals[telescopePos - 1], 600));
 		_vm->_sound->playSound(14); // Play the moving sound
 		_vm->_video->waitUntilMovieEnds(handle);
 
@@ -2459,7 +2464,7 @@ void RivenExternal::xtexterior300_telescopeup(uint16 argc, uint16 *argv) {
 		// Play the sound of not being able to move
 		_vm->_cursor->setCursor(kRivenHideCursor);
 		_vm->_system->updateScreen();
-		_vm->_sound->playSoundBlocking(13);
+		_vm->_sound->playSound(13);
 		return;
 	}
 
@@ -2467,7 +2472,7 @@ void RivenExternal::xtexterior300_telescopeup(uint16 argc, uint16 *argv) {
 	static const uint32 timeIntervals[] = { 0, 800, 1680, 2560, 3440, 4320 };
 	uint16 movieCode = _vm->_vars["ttelecover"] ? 4 : 5;
 	VideoHandle handle = _vm->_video->playMovieRiven(movieCode);
-	_vm->_video->setVideoBounds(handle, Audio::Timestamp(0, timeIntervals[telescopePos - 1], 600), Audio::Timestamp(0, timeIntervals[telescopePos], 600));
+	handle->setBounds(Audio::Timestamp(0, timeIntervals[telescopePos - 1], 600), Audio::Timestamp(0, timeIntervals[telescopePos], 600));
 	_vm->_sound->playSound(14); // Play the moving sound
 	_vm->_video->waitUntilMovieEnds(handle);
 
@@ -2513,7 +2518,7 @@ void RivenExternal::xthideinventory(uint16 argc, uint16 *argv) {
 static const uint32 kMarbleCount = 6;
 static const int kSmallMarbleWidth = 4;
 static const int kSmallMarbleHeight = 2;
-static const int kLargeMarbleSize = 8;
+//static const int kLargeMarbleSize = 8;
 static const int kMarbleHotspotSize = 13;
 static const char *s_marbleNames[] = { "tred", "torange", "tyellow", "tgreen", "tblue", "tviolet" };
 
@@ -2569,26 +2574,47 @@ void RivenExternal::xt7500_checkmarbles(uint16 argc, uint16 *argv) {
 
 void RivenExternal::xt7600_setupmarbles(uint16 argc, uint16 *argv) {
 	// Draw the small marbles when we're a step away from the waffle
-	uint16 baseBitmapId = _vm->findResourceID(ID_TBMP, "*tsmallred");
+
+	// Convert from marble X coordinate to screen X coordinate
+	static const uint16 xPosOffsets[] = {
+		246, 245, 244, 243, 243, 241, 240, 240, 239, 238, 237, 237, 236, 235, 234, 233, 232, 231, 230, 229, 228, 227, 226, 226, 225
+	};
+
+	// Convert from marble Y coordinate to screen Y coordinate
+	static const uint16 yPosOffsets[] = {
+		261, 263, 265, 267, 268, 270, 272, 274, 276, 278, 281, 284, 285, 288, 290, 293, 295, 298, 300, 303, 306, 309, 311, 314, 316
+	};
+
+	// Handle spacing for y coordinates due to the angle
+	static const double yAdjusts[] = {
+		4.56, 4.68, 4.76, 4.84, 4.84, 4.96, 5.04, 5.04, 5.12, 5.2, 5.28, 5.28, 5.36, 5.44, 5.4, 5.6, 5.72, 5.8, 5.88, 5.96, 6.04, 6.12, 6.2, 6.2, 6.28
+	};
+
+	// Waffle state of 0 is up, 1 down
 	bool waffleDown = _vm->_vars["twaffle"] != 0;
 
 	// Note that each of the small marble images is exactly 4x2
+	// The original seems to scale the marble images from extras.mhk, but
+	// we're using the pre-scaled images in the stack.
+	uint16 baseBitmapId = _vm->findResourceID(ID_TBMP, "*tsmallred");
 
 	for (uint16 i = 0; i < kMarbleCount; i++) {
-		uint32 &var = _vm->_vars[s_marbleNames[i]];
+		uint32 var = _vm->_vars[s_marbleNames[i]];
 
 		if (var == 0) {
 			// The marble is still in its initial place
 			// (Note that this is still drawn even if the waffle is down)
-			int marbleX = 376 + i * 2;
-			int marbleY = 253 + i * 4;
-			_vm->_gfx->copyImageToScreen(baseBitmapId + i, marbleX, marbleY, marbleX + kSmallMarbleWidth, marbleY + kSmallMarbleHeight);
+			static const uint16 defaultX[] = { 375, 377, 379, 381, 383, 385 };
+			static const uint16 defaultY[] = { 253, 257, 261, 265, 268, 273 };
+			_vm->_gfx->copyImageToScreen(baseBitmapId + i, defaultX[i], defaultY[i], defaultX[i] + kSmallMarbleWidth, defaultY[i] + kSmallMarbleHeight);
 		} else if (waffleDown) {
 			// The marble is on the grid and the waffle is down
 			// (Nothing to draw here)
 		} else {
 			// The marble is on the grid and the waffle is up
-			// TODO: Draw them onto the grid
+			int marbleX = (int)floor(getMarbleX(var) * yAdjusts[getMarbleY(var)] + xPosOffsets[getMarbleY(var)] + 0.5);
+			int marbleY = yPosOffsets[getMarbleY(var)];
+			_vm->_gfx->copyImageToScreen(baseBitmapId + i, marbleX, marbleY, marbleX + kSmallMarbleWidth, marbleY + kSmallMarbleHeight);
 		}
 	}
 }

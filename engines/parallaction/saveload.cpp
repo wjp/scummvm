@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -25,10 +25,7 @@
 #include "common/textconsole.h"
 #include "common/translation.h"
 
-#include "gui/dialog.h"
 #include "gui/saveload.h"
-#include "gui/widget.h"
-#include "gui/widgets/list.h"
 #include "gui/message.h"
 
 #include "parallaction/parallaction.h"
@@ -88,7 +85,7 @@ void SaveLoad_ns::doLoadGame(uint16 slot) {
 	_vm->_score = atoi(s.c_str());
 
 	s = f->readLine();
-	_globalFlags = atoi(s.c_str());
+	g_globalFlags = atoi(s.c_str());
 
 	s = f->readLine();
 	_vm->_numLocations = atoi(s.c_str());
@@ -96,7 +93,7 @@ void SaveLoad_ns::doLoadGame(uint16 slot) {
 	uint16 _si;
 	for (_si = 0; _si < _vm->_numLocations; _si++) {
 		s = f->readLine();
-		strcpy(_vm->_locationNames[_si], s.c_str());
+		Common::strlcpy(_vm->_locationNames[_si], s.c_str(), 32);
 
 		s = f->readLine();
 		_vm->_localFlags[_si] = atoi(s.c_str());
@@ -151,7 +148,7 @@ void SaveLoad_ns::doSaveGame(uint16 slot, const char* name) {
 	sprintf(s, "%s\n", _vm->_char.getFullName());
 	f->writeString(s);
 
-	sprintf(s, "%s\n", _saveData1);
+	sprintf(s, "%s\n", g_saveData1);
 	f->writeString(s);
 	sprintf(s, "%d\n", _vm->_char._ani->getX());
 	f->writeString(s);
@@ -159,7 +156,7 @@ void SaveLoad_ns::doSaveGame(uint16 slot, const char* name) {
 	f->writeString(s);
 	sprintf(s, "%d\n", _vm->_score);
 	f->writeString(s);
-	sprintf(s, "%u\n", _globalFlags);
+	sprintf(s, "%u\n", g_globalFlags);
 	f->writeString(s);
 
 	sprintf(s, "%d\n", _vm->_numLocations);
@@ -194,7 +191,7 @@ int SaveLoad::selectSaveFile(Common::String &selectedName, bool saveMode, const 
 
 bool SaveLoad::loadGame() {
 	Common::String null;
-	int _di = selectSaveFile(null, false, "Load file", "Load");
+	int _di = selectSaveFile(null, false, _("Load file"), _("Load"));
 	if (_di == -1) {
 		return false;
 	}
@@ -209,7 +206,7 @@ bool SaveLoad::loadGame() {
 
 bool SaveLoad::saveGame() {
 	Common::String saveName;
-	int slot = selectSaveFile(saveName, true, "Save file", "Save");
+	int slot = selectSaveFile(saveName, true, _("Save file"), _("Save"));
 	if (slot == -1) {
 		return false;
 	}
@@ -269,7 +266,7 @@ void SaveLoad_ns::getGamePartProgress(bool *complete, int size) {
 
 static bool askRenameOldSavefiles() {
 	GUI::MessageDialog dialog0(
-		_("ScummVM found that you have old savefiles for Nippon Safes that should be renamed.\n"
+		_("ScummVM found that you have old saved games for Nippon Safes that should be renamed.\n"
 		"The old names are no longer supported, so you will not be able to load your games if you don't convert them.\n\n"
 		"Press OK to convert them now, otherwise you will be asked next time.\n"), _("OK"), _("Cancel"));
 
@@ -316,7 +313,7 @@ void SaveLoad_ns::renameOldSavefiles() {
 
 	Common::String msg;
 	if (success == numOldSaves) {
-		msg = _("ScummVM successfully converted all your savefiles.");
+		msg = _("ScummVM successfully converted all your saved games.");
 	} else {
 		msg = _("ScummVM printed some warnings in your console window and can't guarantee all your files have been converted.\n\n"
 			"Please report to the team.");

@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -29,6 +29,9 @@
 #include "backends/mixer/sdl/sdl-mixer.h"
 #include "backends/events/sdl/sdl-events.h"
 #include "backends/log/log.h"
+#include "backends/platform/sdl/sdl-window.h"
+
+#include "common/array.h"
 
 /**
  * Base OSystem class for all SDL ports.
@@ -52,6 +55,8 @@ public:
 	 */
 	virtual SdlMixerManager *getMixerManager();
 
+	virtual bool hasFeature(Feature f);
+
 	// Override functions from ModularBackend and OSystem
 	virtual void initBackend();
 #if defined(USE_TASKBAR)
@@ -66,16 +71,25 @@ public:
 
 	virtual Common::String getSystemLanguage() const;
 
+	// Clipboard
+	virtual bool hasTextInClipboard();
+	virtual Common::String getTextFromClipboard();
+
 	virtual void setWindowCaption(const char *caption);
 	virtual void addSysArchivesToSearchSet(Common::SearchSet &s, int priority = 0);
-	virtual uint32 getMillis();
+	virtual uint32 getMillis(bool skipRecord = false);
 	virtual void delayMillis(uint msecs);
 	virtual void getTimeAndDate(TimeDate &td) const;
 	virtual Audio::Mixer *getMixer();
+	virtual Common::TimerManager *getTimerManager();
+	virtual Common::SaveFileManager *getSavefileManager();
 
 protected:
 	bool _inited;
 	bool _initedSDL;
+#ifdef USE_SDL_NET
+	bool _initedSDLnet;
+#endif
 
 	/**
 	 * Mixer manager that configures and setups SDL for
@@ -88,6 +102,11 @@ protected:
 	 */
 	SdlEventSource *_eventSource;
 
+	/**
+	 * The SDL output window.
+	 */
+	SdlWindow *_window;
+
 	virtual Common::EventSource *getDefaultEventSource() { return _eventSource; }
 
 	/**
@@ -96,24 +115,29 @@ protected:
 	virtual void initSDL();
 
 	/**
-	 * Setup the window icon.
+	 * Create the audio CD manager
 	 */
-	virtual void setupIcon();
+	virtual AudioCDManager *createAudioCDManager();
 
 	// Logging
 	virtual Common::WriteStream *createLogFile() { return 0; }
 	Backends::Log::Log *_logger;
 
 #ifdef USE_OPENGL
-	OSystem::GraphicsMode *_graphicsModes;
+	int _desktopWidth, _desktopHeight;
+
+	typedef Common::Array<GraphicsMode> GraphicsModeArray;
+	GraphicsModeArray _graphicsModes;
+	Common::Array<int> _graphicsModeIds;
 	int _graphicsMode;
-	int _sdlModesCount;
-	int _glModesCount;
+	int _firstGLMode;
+	int _defaultSDLMode;
+	int _defaultGLMode;
 
 	/**
 	 * Creates the merged graphics modes list
 	 */
-	virtual void setupGraphicsModes();
+	void setupGraphicsModes();
 
 	virtual const OSystem::GraphicsMode *getSupportedGraphicsModes() const;
 	virtual int getDefaultGraphicsMode() const;

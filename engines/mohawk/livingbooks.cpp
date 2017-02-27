@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -39,6 +39,8 @@
 #include "engines/util.h"
 
 #include "gui/message.h"
+
+#include "graphics/cursorman.h"
 
 namespace Mohawk {
 
@@ -142,26 +144,22 @@ MohawkEngine_LivingBooks::MohawkEngine_LivingBooks(OSystem *syst, const MohawkGa
 
 	_rnd = new Common::RandomSource("livingbooks");
 
+	_sound = NULL;
 	_page = NULL;
 
 	const Common::FSNode gameDataDir(ConfMan.get("path"));
 	// Rugrats
-	const Common::FSNode ProgPath = gameDataDir.getChild("program");
-	if (ProgPath.exists())
-		SearchMan.addDirectory(ProgPath.getPath(), ProgPath, 0, 2);
-	const Common::FSNode RugPath = gameDataDir.getChild("Rugrats Adventure Game");
-	if (RugPath.exists())
-		SearchMan.addDirectory(RugPath.getPath(), RugPath, 0, 2);
+	SearchMan.addSubDirectoryMatching(gameDataDir, "program", 0, 2);
+	SearchMan.addSubDirectoryMatching(gameDataDir, "Rugrats Adventure Game", 0, 2);
 	// CarmenTQ
-	const Common::FSNode CTQPath = gameDataDir.getChild("95instal");
-	if (CTQPath.exists())
-		SearchMan.addDirectory(CTQPath.getPath(), CTQPath, 0, 4);
+	SearchMan.addSubDirectoryMatching(gameDataDir, "95instal", 0, 4);
 }
 
 MohawkEngine_LivingBooks::~MohawkEngine_LivingBooks() {
 	destroyPage();
 
 	delete _console;
+	delete _sound;
 	delete _gfx;
 	delete _rnd;
 	_bookInfoFile.clear();
@@ -186,6 +184,7 @@ Common::Error MohawkEngine_LivingBooks::run() {
 		error("Could not find xRes/yRes variables");
 
 	_gfx = new LBGraphics(this, _screenWidth, _screenHeight);
+	_sound = new Sound(this);
 
 	if (getGameType() != GType_LIVINGBOOKSV1)
 		_cursor = new LivingBooksCursorManager_v2();
@@ -223,7 +222,7 @@ Common::Error MohawkEngine_LivingBooks::run() {
 					}
 				}
 
-				if (found)
+				if (found && CursorMan.isVisible())
 					found->handleMouseDown(event.mouse);
 				break;
 
@@ -243,6 +242,8 @@ Common::Error MohawkEngine_LivingBooks::run() {
 				case Common::KEYCODE_ESCAPE:
 					if (_curMode == kLBIntroMode)
 						tryLoadPageStart(kLBControlMode, 1);
+					else
+						_video->stopVideos();
 					break;
 
 				case Common::KEYCODE_LEFT:
@@ -313,8 +314,8 @@ void MohawkEngine_LivingBooks::loadBookInfo(const Common::String &filename) {
 	//     - fDebugWindow                (always 0?)
 
 	if (_bookInfoFile.hasSection("Globals")) {
-		const Common::ConfigFile::SectionKeyList globals = _bookInfoFile.getKeys("Globals");
-		for (Common::ConfigFile::SectionKeyList::const_iterator i = globals.begin(); i != globals.end(); i++) {
+		const Common::INIFile::SectionKeyList globals = _bookInfoFile.getKeys("Globals");
+		for (Common::INIFile::SectionKeyList::const_iterator i = globals.begin(); i != globals.end(); i++) {
 			Common::String command = Common::String::format("%s = %s", i->key.c_str(), i->value.c_str());
 			LBCode tempCode(this, 0);
 			uint offset = tempCode.parseCode(command);
@@ -365,6 +366,44 @@ void MohawkEngine_LivingBooks::destroyPage() {
 	_focus = NULL;
 }
 
+// Replace any colons (originally a slash) with another character
+static Common::String replaceColons(const Common::String &in, char replace) {
+	Common::String out;
+
+	for (uint32 i = 0; i < in.size(); i++) {
+		if (in[i] == ':')
+			out += replace;
+		else
+			out += in[i];
+	}
+
+	return out;
+}
+
+// Helper function to assist in opening pages
+static bool tryOpenPage(Archive *archive, const Common::String &fileName) {
+	// Try the plain file name first
+	if (archive->openFile(fileName))
+		return true;
+
+	// No colons, then bail out
+	if (!fileName.contains(':'))
+		return false;
+
+	// Try replacing colons with underscores (in case the original was
+	// a Mac version and had slashes not as a separator).
+	if (archive->openFile(replaceColons(fileName, '_')))
+		return true;
+
+	// Try replacing colons with slashes (in case the original was a Mac
+	// version and had slashes as a separator).
+	if (archive->openFile(replaceColons(fileName, '/')))
+		return true;
+
+	// Failed to open the archive
+	return false;
+}
+
 bool MohawkEngine_LivingBooks::loadPage(LBMode mode, uint page, uint subpage) {
 	destroyPage();
 
@@ -412,7 +451,7 @@ bool MohawkEngine_LivingBooks::loadPage(LBMode mode, uint page, uint subpage) {
 	}
 
 	Archive *pageArchive = createArchive();
-	if (!filename.empty() && pageArchive->openFile(filename)) {
+	if (!filename.empty() && tryOpenPage(pageArchive, filename)) {
 		_page = new LBPage(this);
 		_page->open(pageArchive, 1000);
 	} else {
@@ -585,8 +624,8 @@ void MohawkEngine_LivingBooks::updatePage() {
 				_items.remove_at(i);
 				i--;
 				_orderedItems.remove(delayedEvent.item);
-				delete delayedEvent.item;
 				_page->itemDestroyed(delayedEvent.item);
+				delete delayedEvent.item;
 				if (_focus == delayedEvent.item)
 					_focus = NULL;
 				break;
@@ -826,18 +865,18 @@ int MohawkEngine_LivingBooks::getIntFromConfig(const Common::String &section, co
 
 Common::String MohawkEngine_LivingBooks::getFileNameFromConfig(const Common::String &section, const Common::String &key, Common::String &leftover) {
 	Common::String string = getStringFromConfig(section, key, leftover);
-	Common::String x;
 
-	uint32 i = 0;
 	if (string.hasPrefix("//")) {
 		// skip "//CD-ROM Title/" prefixes which we don't care about
-		i = 3;
+		uint i = 3;
 		while (i < string.size() && string[i - 1] != '/')
 			i++;
-	}
-	x = string.c_str() + i;
 
-	return (getPlatform() == Common::kPlatformMacintosh) ? convertMacFileName(x) : convertWinFileName(x);
+		// Already uses slashes, no need to convert further
+		return string.c_str() + i;
+	}
+
+	return (getPlatform() == Common::kPlatformMacintosh) ? convertMacFileName(string) : convertWinFileName(string);
 }
 
 Common::String MohawkEngine_LivingBooks::removeQuotesFromString(const Common::String &string, Common::String &leftover) {
@@ -868,8 +907,10 @@ Common::String MohawkEngine_LivingBooks::convertMacFileName(const Common::String
 	for (uint32 i = 0; i < string.size(); i++) {
 		if (i == 0 && string[i] == ':') // First character should be ignored (another colon)
 			continue;
-		if (string[i] == ':')
+		if (string[i] == ':') // Directory separator
 			filename += '/';
+		else if (string[i] == '/') // Literal slash
+			filename += ':'; // Replace by colon, as used by Mac OS X for slash
 		else
 			filename += string[i];
 	}
@@ -1354,8 +1395,9 @@ void MohawkEngine_LivingBooks::handleNotify(NotifyEvent &event) {
 			if (!loadPage((LBMode)event.newMode, event.newPage, event.newSubpage)) {
 				if (event.newPage != 0 || !loadPage((LBMode)event.newMode, _curPage, event.newSubpage))
 					if (event.newSubpage != 0 || !loadPage((LBMode)event.newMode, event.newPage, 1))
-						error("kLBNotifyChangeMode failed to move to mode %d, page %d.%d",
-							event.newMode, event.newPage, event.newSubpage);
+						if (event.newSubpage != 1 || !loadPage((LBMode)event.newMode, event.newPage, 0))
+							error("kLBNotifyChangeMode failed to move to mode %d, page %d.%d",
+								event.newMode, event.newPage, event.newSubpage);
 			}
 			break;
 		case 3:
@@ -3773,7 +3815,7 @@ LBMovieItem::~LBMovieItem() {
 void LBMovieItem::update() {
 	if (_playing) {
 		VideoHandle videoHandle = _vm->_video->findVideoHandle(_resourceId);
-		if (_vm->_video->endOfVideo(videoHandle))
+		if (!videoHandle || videoHandle->endOfVideo())
 			done(true);
 	}
 
@@ -3783,8 +3825,12 @@ void LBMovieItem::update() {
 bool LBMovieItem::togglePlaying(bool playing, bool restart) {
 	if (playing) {
 		if ((_loaded && _enabled && _globalEnabled) || _phase == kLBPhaseNone) {
-			_vm->_video->playMovie(_resourceId, _rect.left, _rect.top);
+			debug("toggled video for phase %d", _phase);
+			VideoHandle handle = _vm->_video->playMovie(_resourceId);
+			if (!handle)
+				error("Failed to open tMOV %d", _resourceId);
 
+			handle->moveTo(_rect.left, _rect.top);
 			return true;
 		}
 	}
@@ -3808,9 +3854,9 @@ bool LBMiniGameItem::togglePlaying(bool playing, bool restart) {
 	// just skip to the most logical page. For optional minigames, this
 	// will return the player to the previous page. For mandatory minigames,
 	// this will send the player to the next page.
-	// TODO: Document mini games from Arthur's Reading Race
 
-	uint16 destPage;
+	uint16 destPage = 0;
+	bool returnToMenu = false;
 
 	// Figure out what minigame we have and bring us back to a page where
 	// the player can continue
@@ -3820,13 +3866,31 @@ bool LBMiniGameItem::togglePlaying(bool playing, bool restart) {
 		destPage = 5;
 	else if (_desc == "Fall") // Green Eggs and Ham: Fall minigame
 		destPage = 13;
+	else if (_desc == "MagicWrite3") // Arthur's Reading Race: "Let Me Write" minigame (Page 3)
+		destPage = 3;
+	else if (_desc == "MagicWrite4") // Arthur's Reading Race: "Let Me Write" minigame (Page 4)
+		destPage = 4;
+	else if (_desc == "MagicSpy5") // Arthur's Reading Race: "I Spy" minigame (Page 5)
+		destPage = 5;
+	else if (_desc == "MagicSpy6") // Arthur's Reading Race: "I Spy" minigame (Page 6)
+		destPage = 6;
+	else if (_desc == "MagicWrite7") // Arthur's Reading Race: "Let Me Write" minigame (Page 7)
+		destPage = 7;
+	else if (_desc == "MagicSpy8") // Arthur's Reading Race: "I Spy" minigame (Page 8)
+		destPage = 8;
+	else if (_desc == "MagicRace") // Arthur's Reading Race: Race minigame
+		returnToMenu = true;
 	else
 		error("Unknown minigame '%s'", _desc.c_str());
 
 	GUI::MessageDialog dialog(Common::String::format("The '%s' minigame is not supported yet.", _desc.c_str()));
 	dialog.runModal();
 
-	_vm->addNotifyEvent(NotifyEvent(kLBNotifyChangePage, destPage));
+	// Go back to the menu if requested, otherwise go to the requested page
+	if (returnToMenu)
+		_vm->addNotifyEvent(NotifyEvent(kLBNotifyGoToControls, 1));
+	else
+		_vm->addNotifyEvent(NotifyEvent(kLBNotifyChangePage, destPage));
 
 	return false;
 }
@@ -3863,7 +3927,7 @@ void LBProxyItem::load() {
 
 	debug(1, "LBProxyItem loading archive '%s' with id %d", filename.c_str(), baseId);
 	Archive *pageArchive = _vm->createArchive();
-	if (!pageArchive->openFile(filename))
+	if (!tryOpenPage(pageArchive, filename))
 		error("failed to open archive '%s' (for proxy '%s')", filename.c_str(), _desc.c_str());
 	_page = new LBPage(_vm);
 	_page->open(pageArchive, baseId);

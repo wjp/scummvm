@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -119,7 +119,7 @@ byte *ScummEngine_v72he::defineArray(int array, int type, int dim2start, int dim
 
 	id = findFreeArrayId();
 
-	debug(9,"defineArray (array %d, dim2start %d, dim2end %d dim1start %d dim1end %d", id, dim2start, dim2end, dim1start, dim1end);
+	debug(9, "defineArray (array %d, dim2start %d, dim2end %d dim1start %d dim1end %d", id, dim2start, dim2end, dim1start, dim1end);
 
 	if (array & 0x80000000) {
 		error("Can't define bit variable as array pointer");
@@ -158,7 +158,7 @@ int ScummEngine_v72he::readArray(int array, int idx2, int idx1) {
 
 	ArrayHeader *ah = (ArrayHeader *)getResourceAddress(rtString, readVar(array));
 
-	if (ah == NULL || ah->data == NULL)
+	if (!ah)
 		error("readArray: invalid array %d (%d)", array, readVar(array));
 
 	if (idx2 < (int)FROM_LE_32(ah->dim2start) || idx2 > (int)FROM_LE_32(ah->dim2end) ||
@@ -227,6 +227,23 @@ int ScummEngine_v72he::setupStringArray(int size) {
 	writeVar(0, 0);
 	defineArray(0, kStringArray, 0, 0, 0, size + 1);
 	writeArray(0, 0, 0, 0);
+	return readVar(0);
+}
+
+int ScummEngine_v72he::setupStringArrayFromString(const char *cStr) {
+	// this is PUI_ScummStringArrayFromCString() found in PUSERMAC.cpp
+	// I can see how its done up there in setupStringArray()
+	// yet I'd note that 'SCUMMVAR_user_reserved' var was used instead of 0
+	// and strlen(), not strlen() + 1 was used
+	// plus, this function actually copies the string, not just 'sets up' the array
+
+	writeVar(0, 0);
+
+	int len = strlen(cStr) + 1;
+	byte *ptr = defineArray(0, kStringArray, 0, 0, 0, len);
+	if (ptr != nullptr)
+		Common::strlcpy((char*)ptr, cStr, len);
+
 	return readVar(0);
 }
 
@@ -699,18 +716,18 @@ void ScummEngine_v72he::o72_roomOps() {
 		setCurrentPalette(a);
 		break;
 
-	case 220:
+	case 220:		// SO_ROOM_COPY_PALETTE
 		a = pop();
 		b = pop();
 		copyPalColor(a, b);
 		break;
 
-	case 221:
+	case 221:		// SO_ROOM_SAVEGAME_BY_NAME
 		byte buffer[256];
 
 		copyScriptString((byte *)buffer, sizeof(buffer));
 
-		_saveLoadFileName = (char *)buffer + convertFilePath(buffer, sizeof(buffer));
+		_saveLoadFileName = (char *)buffer;
 		debug(1, "o72_roomOps: case 221: filename %s", _saveLoadFileName.c_str());
 
 		_saveLoadFlag = pop();
@@ -718,13 +735,13 @@ void ScummEngine_v72he::o72_roomOps() {
 		_saveTemporaryState = true;
 		break;
 
-	case 234:
+	case 234:		// SO_OBJECT_ORDER
 		b = pop();
 		a = pop();
 		swapObjects(a, b);
 		break;
 
-	case 236:
+	case 236:		// SO_ROOM_PALETTE_IN_ROOM
 		b = pop();
 		a = pop();
 		setRoomPalette(a, b);
@@ -752,43 +769,43 @@ void ScummEngine_v72he::o72_actorOps() {
 		return;
 
 	switch (subOp) {
-	case 21: // HE 80+
+	case 21: 		// SO_CONDITION (HE 80+)
 		k = getStackList(args, ARRAYSIZE(args));
 		for (i = 0; i < k; ++i) {
 			a->setUserCondition(args[i] & 0x7F, args[i] & 0x80);
 		}
 		break;
-	case 24: // HE 80+
+	case 24: 		// SO_TALK_CONDITION (HE 80+)
 		k = pop();
 		if (k == 0)
 			k = _rnd.getRandomNumberRng(1, 10);
 		a->_heNoTalkAnimation = 1;
 		a->setTalkCondition(k);
 		break;
-	case 43: // HE 90+
+	case 43: 		// SO_PRIORITY (HE 90+)
 		a->_layer = pop();
 		a->_needRedraw = true;
 		break;
-	case 64:
+	case 64:		// SO_ACTOR_DEFAULT_CLIPPED
 		_actorClipOverride.bottom = pop();
 		_actorClipOverride.right = pop();
 		_actorClipOverride.top = pop();
 		_actorClipOverride.left = pop();
 		adjustRect(_actorClipOverride);
 		break;
-	case 65: // HE 98+
+	case 65: 		// SO_AT (HE 98+)
 		j = pop();
 		i = pop();
 		a->putActor(i, j);
 		break;
-	case 67: // HE 99+
+	case 67:		// SO_CLIPPED (HE 99+)
 		a->_clipOverride.bottom = pop();
 		a->_clipOverride.right = pop();
 		a->_clipOverride.top = pop();
 		a->_clipOverride.left = pop();
 		adjustRect(a->_clipOverride);
 		break;
-	case 68: // HE 90+
+	case 68: // 	// SO_ERASE (HE 90+)
 		k = pop();
 		a->setHEFlag(1, k);
 		break;
@@ -887,10 +904,10 @@ void ScummEngine_v72he::o72_actorOps() {
 		a->_talkPosY = pop();
 		a->_talkPosX = pop();
 		break;
-	case 156:		// HE 72+
+	case 156:		// SO_CHARSET (HE 72+)
 		a->_charset = pop();
 		break;
-	case 175:		// HE 99+
+	case 175:		// SO_ROOM_PALETTE (HE 99+)
 		a->_hePaletteNum = pop();
 		a->_needRedraw = true;
 		break;
@@ -907,15 +924,15 @@ void ScummEngine_v72he::o72_actorOps() {
 	case 217:		// SO_ACTOR_NEW
 		a->initActor(2);
 		break;
-	case 218:
+	case 218:		// SO_BACKGROUND_ON
 		a->drawActorToBackBuf(a->getPos().x, a->getPos().y);
 		break;
-	case 219:
+	case 219:		// SO_BACKGROUND_OFF
 		a->_drawToBackBuf = false;
 		a->_needRedraw = true;
 		a->_needBgReset = true;
 		break;
-	case 225:
+	case 225:		// SO_TALKIE
 		{
 		copyScriptString(string, sizeof(string));
 		int slot = pop();
@@ -1077,7 +1094,7 @@ void ScummEngine_v72he::o72_arrayOps() {
 		memcpy(data, string, len);
 		break;
 
-	case 126:
+	case 126:		// SO_COMPLEX_ARRAY_ASSIGNMENT
 		len = getStackList(list, ARRAYSIZE(list));
 		dim1end = pop();
 		dim1start = pop();
@@ -1101,7 +1118,7 @@ void ScummEngine_v72he::o72_arrayOps() {
 			dim2start++;
 		}
 		break;
-	case 127:
+	case 127:		// SO_COMPLEX_ARRAY_COPY_OPERATION
 		{
 			int a2_dim1end = pop();
 			int a2_dim1start = pop();
@@ -1118,7 +1135,7 @@ void ScummEngine_v72he::o72_arrayOps() {
 			copyArray(array, a1_dim2start, a1_dim2end, a1_dim1start, a1_dim1end, array2, a2_dim2start, a2_dim2end, a2_dim1start, a2_dim1end);
 		}
 		break;
-	case 128:
+	case 128:		// SO_RANGE_ARRAY_ASSIGNMENT
 		b = pop();
 		c = pop();
 		dim1end = pop();
@@ -1149,7 +1166,7 @@ void ScummEngine_v72he::o72_arrayOps() {
 			dim2start++;
 		}
 		break;
-	case 194:
+	case 194:		// SO_FORMATTED_STRING
 		decodeScriptString(string);
 		len = resStrLen(string);
 		data = defineArray(array, kStringArray, 0, 0, 0, len);
@@ -1199,7 +1216,7 @@ void ScummEngine_v72he::o72_systemOps() {
 		break;
 	case 160:
 		// Confirm shutdown
-		quitGame();
+		confirmExitDialog();
 		break;
 	case 244:
 		quitGame();
@@ -1390,10 +1407,7 @@ void ScummEngine_v72he::o72_openFile() {
 
 	mode = pop();
 	copyScriptString(buffer, sizeof(buffer));
-	debug(1, "Original filename %s", buffer);
-
-	const char *filename = (char *)buffer + convertFilePath(buffer, sizeof(buffer));
-	debug(1, "Final filename to %s", filename);
+	debug(1, "Trying to open file '%s'", (char *)buffer);
 
 	slot = -1;
 	for (i = 1; i < 17; i++) {
@@ -1406,48 +1420,17 @@ void ScummEngine_v72he::o72_openFile() {
 	if (slot != -1) {
 		switch (mode) {
 		case 1:   // Read mode
-			if (!_saveFileMan->listSavefiles(filename).empty()) {
-				_hInFileTable[slot] = _saveFileMan->openForLoading(filename);
-			} else {
-				_hInFileTable[slot] = SearchMan.createReadStreamForMember(filename);
-			}
+			_hInFileTable[slot] = openFileForReading(buffer);
 			break;
 		case 2:   // Write mode
-			if (!strchr(filename, '/')) {
-				_hOutFileTable[slot] = _saveFileMan->openForSaving(filename);
+			if (!strchr((char *)buffer, '/')) {
+				_hOutFileTable[slot] = openSaveFileForWriting(buffer);
 			}
 			break;
-		case 6: { // Append mode
-			if (strchr(filename, '/'))
-				break;
-
-			// First check if the file already exists
-			Common::InSaveFile *initialState = 0;
-			if (!_saveFileMan->listSavefiles(filename).empty())
-				initialState = _saveFileMan->openForLoading(filename);
-			else
-				initialState = SearchMan.createReadStreamForMember(filename);
-
-			// Read in the data from the initial file
-			uint32 initialSize = 0;
-			byte *initialData = 0;
-			if (initialState) {
-				initialSize = initialState->size();
-				initialData = new byte[initialSize];
-				initialState->read(initialData, initialSize);
-				delete initialState;
-			}
-
-			// Attempt to open a save file
-			_hOutFileTable[slot] = _saveFileMan->openForSaving(filename);
-
-			// Begin us off with the data from the previous file
-			if (_hOutFileTable[slot] && initialData) {
-				_hOutFileTable[slot]->write(initialData, initialSize);
-				delete[] initialData;
-			}
-
-			} break;
+		case 6: // Append mode
+			if (!strchr((char *)buffer, '/'))
+				_hOutFileTable[slot] = openSaveFileForAppending(buffer);
+			break;
 		default:
 			error("o72_openFile(): wrong open file mode %d", mode);
 		}
@@ -1518,6 +1501,26 @@ void ScummEngine_v72he::writeFileFromArray(int slot, int32 resID) {
 	}
 }
 
+void ScummEngine_v72he::getStringFromArray(int arrayNumber, char *buffer, int maxLength) {
+	// I'm not really sure it belongs here and not some other version
+	// this is ARRAY_GetStringFromArray() from ARRAYS.cpp of SPUTM
+
+	// this function makes a C-string out of <arrayNumber> contents
+
+	VAR(0) = arrayNumber; // it was 0 in original code, but I've seen ScummVM Moonbase code which uses VAR_U32_ARRAY_UNK
+
+	int i, ch;
+	for (i = 0; i < maxLength; ++i) {
+		if (!(ch = readArray(0, 0, i))) {
+			break;
+		}
+
+		buffer[i] = ch;
+	}
+
+	buffer[i] = 0;
+}
+
 void ScummEngine_v72he::o72_writeFile() {
 	int32 resID = pop();
 	int slot = pop();
@@ -1565,13 +1568,10 @@ void ScummEngine_v72he::o72_deleteFile() {
 	byte buffer[256];
 
 	copyScriptString(buffer, sizeof(buffer));
-	const char *filename = (char *)buffer + convertFilePath(buffer, sizeof(buffer));
 
-	debug(1, "o72_deleteFile(%s)", filename);
+	debug(1, "o72_deleteFile(%s)", (char *)buffer);
 
-	if (!_saveFileMan->listSavefiles(filename).empty()) {
-		_saveFileMan->removeSavefile(filename);
-	}
+	deleteSaveFile(buffer);
 }
 
 void ScummEngine_v72he::o72_rename() {
@@ -1580,12 +1580,9 @@ void ScummEngine_v72he::o72_rename() {
 	copyScriptString(buffer1, sizeof(buffer1));
 	copyScriptString(buffer2, sizeof(buffer2));
 
-	const char *newFilename = (char *)buffer1 + convertFilePath(buffer1, sizeof(buffer1));
-	const char *oldFilename = (char *)buffer2 + convertFilePath(buffer2, sizeof(buffer2));
+	debug(1, "o72_rename(%s to %s)", (char *)buffer2, (char *)buffer1);
 
-	_saveFileMan->renameSavefile(oldFilename, newFilename);
-
-	debug(1, "o72_rename(%s to %s)", oldFilename, newFilename);
+	renameSaveFile(buffer2, buffer1);
 }
 
 void ScummEngine_v72he::o72_getPixel() {
@@ -1779,8 +1776,11 @@ void ScummEngine_v72he::copyArray(int array1, int a1_dim2start, int a1_dim2end, 
 				copyArrayHelper(ah, a1_dim2start, a1_dim1start, a1_dim1end, &dst, &dstPitch, &rowSize);
 				copyArrayHelper(ah, a2_dim2start, a2_dim1start, a2_dim1end, &src, &srcPitch, &rowSize);
 			} else {
+				// start at the end, so we copy backwards (in case the indices overlap)
 				copyArrayHelper(ah, a1_dim2end, a1_dim1start, a1_dim1end, &dst, &dstPitch, &rowSize);
 				copyArrayHelper(ah, a2_dim2end, a2_dim1start, a2_dim1end, &src, &srcPitch, &rowSize);
+				dstPitch = -dstPitch;
+				srcPitch = -srcPitch;
 			}
 			for (; a1_dim2start <= a1_dim2end; ++a1_dim2start) {
 				memcpy(dst, src, rowSize);

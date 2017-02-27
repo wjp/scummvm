@@ -44,6 +44,11 @@ devtools/make-scumm-fontdata$(EXEEXT): $(srcdir)/devtools/make-scumm-fontdata.c
 	$(QUIET)$(MKDIR) devtools/$(DEPDIR)
 	$(QUIET_LINK)$(LD) $(CFLAGS) -Wall -o $@ $<
 
+# Rule to explicitly rebuild the wwwroot archive
+wwwroot:
+	$(srcdir)/devtools/make-www-archive.py $(srcdir)/dists/networking/
+	
+
 #
 # Rules to explicitly rebuild the credits / MD5 tables.
 # The rules for the files in the "web" resp. "docs" modules
@@ -56,7 +61,7 @@ credits:
 	$(srcdir)/devtools/credits.pl --text > $(srcdir)/AUTHORS
 #	$(srcdir)/devtools/credits.pl --rtf > $(srcdir)/Credits.rtf
 	$(srcdir)/devtools/credits.pl --cpp > $(srcdir)/gui/credits.h
-	$(srcdir)/devtools/credits.pl --xml-website > $(srcdir)/../../web/trunk/data/credits.xml
+	$(srcdir)/devtools/credits.pl --xml-website > $(srcdir)/../scummvm-web/data/credits.xml
 #	$(srcdir)/devtools/credits.pl --xml-docbook > $(srcdir)/../../docs/trunk/docbook/credits.xml
 
 md5scumm: devtools/md5table$(EXEEXT)

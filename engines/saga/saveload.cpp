@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -34,7 +34,7 @@
 #include "saga/scene.h"
 #include "saga/script.h"
 
-#define CURRENT_SAGA_VER 7
+#define CURRENT_SAGA_VER 8
 
 namespace Saga {
 
@@ -56,7 +56,7 @@ SaveFileData *SagaEngine::getSaveFile(uint idx) {
 		return &_saveFiles[_saveFilesCount - idx - 1];
 	} else {
 		if (!emptySlot.name[0])
-			strcpy(emptySlot.name, getTextString(kTextNewSave));
+			Common::strlcpy(emptySlot.name, getTextString(kTextNewSave), SAVE_TITLE_SIZE);
 
 		return (idx == 0) ? &emptySlot : &_saveFiles[_saveFilesCount - idx];
 	}
@@ -176,7 +176,7 @@ void SagaEngine::save(const char *fileName, const char *saveName) {
 	// Note that IHNM has a smaller save title size than ITE
 	// We allocate the ITE save title size here, to preserve
 	// savegame backwards compatibility
-	strncpy(_saveHeader.name, saveName, SAVE_TITLE_SIZE);
+	Common::strlcpy(_saveHeader.name, saveName, SAVE_TITLE_SIZE);
 
 	out->writeUint32BE(_saveHeader.type);
 	out->writeUint32LE(_saveHeader.size);
@@ -185,7 +185,7 @@ void SagaEngine::save(const char *fileName, const char *saveName) {
 
 	// Original game title
 	memset(title, 0, TITLESIZE);
-	strncpy(title, _gameTitle.c_str(), TITLESIZE);
+	Common::strlcpy(title, _gameTitle.c_str(), TITLESIZE);
 	out->write(title, TITLESIZE);
 
 	// Thumbnail
@@ -204,18 +204,18 @@ void SagaEngine::save(const char *fileName, const char *saveName) {
 
 	uint32 saveDate = ((curTime.tm_mday & 0xFF) << 24) | (((curTime.tm_mon + 1) & 0xFF) << 16) | ((curTime.tm_year + 1900) & 0xFFFF);
 	uint16 saveTime = ((curTime.tm_hour & 0xFF) << 8) | ((curTime.tm_min) & 0xFF);
+	uint32 playTime = g_engine->getTotalPlayTime() / 1000;
 
 	out->writeUint32BE(saveDate);
 	out->writeUint16BE(saveTime);
-	// TODO: played time
+	out->writeUint32BE(playTime);
 
 	// Surrounding scene
 	out->writeSint32LE(_scene->getOutsetSceneNumber());
 #ifdef ENABLE_IHNM
 	if (getGameId() == GID_IHNM) {
 		out->writeSint32LE(_scene->currentChapterNumber());
-		// Protagonist
-		out->writeSint32LE(_scene->currentProtag());
+		out->writeSint32LE(0);	// obsolete, was used for the protagonist
 		out->writeSint32LE(_scene->getCurrentMusicTrack());
 		out->writeSint32LE(_scene->getCurrentMusicRepeat());
 	}
@@ -299,7 +299,11 @@ void SagaEngine::load(const char *fileName) {
 
 		in->readUint32BE();	// save date
 		in->readUint16BE(); // save time
-		// TODO: played time
+
+		if (_saveHeader.version >= 8) {
+			uint32 playTime = in->readUint32BE();
+			g_engine->setTotalPlayTime(playTime * 1000);
+		}
 	}
 
 	// Clear pending events here, and don't process queued music events
@@ -311,7 +315,7 @@ void SagaEngine::load(const char *fileName) {
 	if (getGameId() == GID_IHNM) {
 		int currentChapter = _scene->currentChapterNumber();
 		_scene->setChapterNumber(in->readSint32LE());
-		_scene->setProtag(in->readSint32LE());
+		in->skip(4);	// obsolete, was used for setting the protagonist
 		if (_scene->currentChapterNumber() != currentChapter)
 			_scene->changeScene(-2, 0, kTransitionFade, _scene->currentChapterNumber());
 		_scene->setCurrentMusicTrack(in->readSint32LE());
@@ -360,30 +364,6 @@ void SagaEngine::load(const char *fileName) {
 	// Mute volume to prevent outScene music play
 	int volume = _music->getVolume();
 	_music->setVolume(0);
-
-#ifdef ENABLE_IHNM
-	// Protagonist swapping
-	if (getGameId() == GID_IHNM) {
-		if (_scene->currentProtag() != 0 && _scene->currentChapterNumber() != 6) {
-			ActorData *actor1 = _actor->getFirstActor();
-			ActorData *actor2;
-			// The original gets actor2 from the current protagonist ID, but this is sometimes wrong
-			// If the current protagonist ID is not correct, use the stored protagonist
-			if (!_actor->validActorId(_scene->currentProtag())) {
-				actor2 = _actor->_protagonist;
-			} else {
-				actor2 = _actor->getActor(_scene->currentProtag());
-			}
-
-			SWAP(actor1->_location, actor2->_location);
-
-			actor2->_flags &= ~kProtagonist;
-			actor1->_flags |= kProtagonist;
-			_actor->_protagonist = _actor->_centerActor = actor1;
-			_scene->setProtag(actor1->_id);
-		}
-	}
-#endif
 
 	_scene->clearSceneQueue();
 	_scene->changeScene(sceneNumber, ACTOR_NO_ENTRANCE, kTransitionNoFade);

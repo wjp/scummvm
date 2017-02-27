@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -45,8 +45,8 @@ static const OSystem::GraphicsMode s_supportedGraphicsModes[] = {
 	{0, 0, 0}
 };
 
-LinuxmotoSdlGraphicsManager::LinuxmotoSdlGraphicsManager(SdlEventSource *sdlEventSource)
- : SurfaceSdlGraphicsManager(sdlEventSource) {
+LinuxmotoSdlGraphicsManager::LinuxmotoSdlGraphicsManager(SdlEventSource *sdlEventSource, SdlWindow *window)
+ : SurfaceSdlGraphicsManager(sdlEventSource, window) {
 }
 
 const OSystem::GraphicsMode *LinuxmotoSdlGraphicsManager::getSupportedGraphicsModes() const {
@@ -134,7 +134,7 @@ void LinuxmotoSdlGraphicsManager::initSize(uint w, uint h) {
 	if	(w > 320 || h > 240) {
 		setGraphicsMode(GFX_HALF);
 		setGraphicsModeIntern();
-		_eventSource->toggleMouseGrab();
+		_window->toggleMouseGrab();
 	}
 
 	_transactionDetails.sizeChanged = true;
@@ -290,26 +290,6 @@ void LinuxmotoSdlGraphicsManager::internUpdateScreen() {
 		_forceFull = true;
 	}
 
-#ifdef USE_OSD
-	// OSD visible (i.e. non-transparent)?
-	if (_osdAlpha != SDL_ALPHA_TRANSPARENT) {
-		// Updated alpha value
-		const int diff = SDL_GetTicks() - _osdFadeStartTime;
-		if (diff > 0) {
-			if (diff >= kOSDFadeOutDuration) {
-				// Back to full transparency
-				_osdAlpha = SDL_ALPHA_TRANSPARENT;
-			} else {
-				// Do a linear fade out...
-				const int startAlpha = SDL_ALPHA_TRANSPARENT + kOSDInitialAlpha * (SDL_ALPHA_OPAQUE - SDL_ALPHA_TRANSPARENT) / 100;
-				_osdAlpha = startAlpha + diff * (SDL_ALPHA_TRANSPARENT - startAlpha) / kOSDFadeOutDuration;
-			}
-			SDL_SetAlpha(_osdSurface, SDL_RLEACCEL | SDL_SRCCOLORKEY | SDL_SRCALPHA, _osdAlpha);
-			_forceFull = true;
-		}
-	}
-#endif
-
 	if (!_overlayVisible) {
 		origSurf = _screen;
 		srcSurf = _tmpscreen;
@@ -330,6 +310,10 @@ void LinuxmotoSdlGraphicsManager::internUpdateScreen() {
 	// we have to redraw the mouse.
 	if (_mouseNeedsRedraw)
 		undrawMouse();
+
+#ifdef USE_OSD
+	updateOSD();
+#endif
 
 	// Force a full redraw if requested
 	if (_forceFull) {
@@ -439,10 +423,9 @@ void LinuxmotoSdlGraphicsManager::internUpdateScreen() {
 		drawMouse();
 
 #ifdef USE_OSD
-		if (_osdAlpha != SDL_ALPHA_TRANSPARENT) {
-			SDL_BlitSurface(_osdSurface, 0, _hwscreen, 0);
-		}
+		drawOSD();
 #endif
+
 		// Finally, blit all our changes to the screen
 		SDL_UpdateRects(_hwscreen, _numDirtyRects, _dirtyRectList);
 	}

@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -79,53 +79,64 @@ static bool find_track(int track, int &first_sec, int &last_sec)
   if (first < 1 || last > 99 || first > last)
     return false;
   for (i=first; i<=last; i++)
-    if (!(TOC_CTRL(toc->entry[i-1])&4))
+    if (!(TOC_CTRL(toc->entry[i-1])&4)) {
       if (track==1) {
 	first_sec = TOC_LBA(toc->entry[i-1]);
 	last_sec = TOC_LBA(toc->entry[i]);
 	return true;
       } else
 	--track;
+    }
   return false;
 }
 
-void DCCDManager::playCD(int track, int num_loops, int start_frame, int duration)
-{
-  int first_sec, last_sec;
+bool DCCDManager::play(int track, int numLoops, int startFrame, int duration, bool onlyEmulate) {
+	DefaultAudioCDManager::play(track, numLoops, startFrame, duration, onlyEmulate);
+
+	// If we're playing now return here
+	if (isPlaying()) {
+		return true;
+	}
+
+	// If we should only play emulated tracks stop here.
+	if (onlyEmulate) {
+		return false;
+	}
+
+	int firstSec, lastSec;
 #if 1
-  if (num_loops)
-    --num_loops;
+	if (numLoops)
+		--numLoops;
 #endif
-  if (num_loops>14) num_loops=14;
-  else if (num_loops<0) num_loops=15; // infinity
-  if (!find_track(track, first_sec, last_sec))
-    return;
-  if (duration)
-    last_sec = first_sec + start_frame + duration;
-  first_sec += start_frame;
-  play_cdda_sectors(first_sec, last_sec, num_loops);
+
+	if (numLoops > 14)
+		numLoops = 14;
+	else if (numLoops < 0)
+		numLoops = 15; // infinity
+
+	if (!find_track(track, firstSec, lastSec))
+		return false;
+
+	if (duration)
+		lastSec = firstSec + startFrame + duration;
+
+	firstSec += startFrame;
+	play_cdda_sectors(firstSec, lastSec, numLoops);
+
+	return true;
 }
 
-void DCCDManager::stopCD()
-{
-  stop_cdda();
+void DCCDManager::stop() {
+	DefaultAudioCDManager::stop();
+	stop_cdda();
 }
 
-bool DCCDManager::pollCD()
-{
-  extern int getCdState();
-  return getCdState() == 3;
-}
+bool DCCDManager::isPlaying() const {
+	if (DefaultAudioCDManager::isPlaying())
+		return true;
 
-void DCCDManager::updateCD()
-{
-  // Dummy.  The CD drive takes care of itself.
-}
-
-bool DCCDManager::openCD(int drive)
-{
-  // Dummy.
-  return true;
+	extern int getCdState();
+	return getCdState() == 3;
 }
 
 void OSystem_Dreamcast::setWindowCaption(const char *caption)
@@ -281,7 +292,7 @@ namespace DC_Flash {
 	if((r = syscall_read_flash(info[0] + (bmb++ << 6), bm, 64))<0)
 	  return r;
       }
-      if(!(bm[(b>>3)&63] & (0x80>>(b&7))))
+      if(!(bm[(b>>3)&63] & (0x80>>(b&7)))) {
 	if((r = syscall_read_flash(info[0] + ((b+1) << 6), buf, 64))<0)
 	  return r;
 	else if((s=*(unsigned short *)(buf+0)) == sec &&
@@ -289,6 +300,7 @@ namespace DC_Flash {
 	  memcpy(dst+(s-sec)*60, buf+2, 60);
 	  got=1;
 	}
+      }
     }
     return got;
   }

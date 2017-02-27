@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -27,9 +27,13 @@
 #include "common/debug-channels.h"
 #include "common/config-manager.h"
 #include "common/textconsole.h"
+#include "common/translation.h"
 
 #include "hugo/hugo.h"
+#include "hugo/console.h"
+#include "hugo/dialogs.h"
 #include "hugo/file.h"
+#include "hugo/game.h"
 #include "hugo/schedule.h"
 #include "hugo/display.h"
 #include "hugo/mouse.h"
@@ -46,11 +50,11 @@
 
 namespace Hugo {
 
-HugoEngine *HugoEngine::s_Engine = 0;
+HugoEngine *HugoEngine::s_Engine = nullptr;
 
 HugoEngine::HugoEngine(OSystem *syst, const HugoGameDescription *gd) : Engine(syst), _gameDescription(gd),
-	_hero(0), _heroImage(0), _defltTunes(0), _numScreens(0), _tunesNbr(0), _soundSilence(0), _soundTest(0),
-	_screenStates(0), _numStates(0), _score(0), _maxscore(0), _lastTime(0), _curTime(0), _episode(0)
+	_hero(nullptr), _heroImage(0), _defltTunes(nullptr), _numScreens(0), _tunesNbr(0), _soundSilence(0), _soundTest(0),
+	_screenStates(nullptr), _numStates(0), _score(0), _maxscore(0), _lastTime(0), _curTime(0), _episode(nullptr)
 {
 	_system = syst;
 	DebugMan.addDebugChannel(kDebugSchedule, "Schedule", "Script Schedule debug level");
@@ -66,6 +70,53 @@ HugoEngine::HugoEngine(OSystem *syst, const HugoGameDescription *gd) : Engine(sy
 
 	_console = new HugoConsole(this);
 	_rnd = 0;
+
+	_screen = nullptr;
+	_mouse = nullptr;
+	_inventory = nullptr;
+	_parser = nullptr;
+	_route = nullptr;
+	_sound = nullptr;
+	_intro = nullptr;
+	_object = nullptr;
+	_text = nullptr;
+	_topMenu = nullptr;
+	_status._storyModeFl = false;
+	_status._gameOverFl = false;
+	_status._lookFl = false;
+	_status._recallFl = false;
+	_status._newScreenFl = false;
+	_status._godModeFl = false;
+	_status._showBoundariesFl = false;
+	_status._doQuitFl = false;
+	_status._skipIntroFl = false;
+	_status._helpFl = false;
+	_status._tick = 0;
+	_status._viewState = kViewIntroInit;
+	_status._song = 0;
+	_gameType = kGameTypeNone;
+	_platform = Common::kPlatformUnknown;
+	_packedFl = false;
+
+	_numVariant = 0;
+	_gameVariant = kGameVariantNone;
+	_normalTPS = 0;
+	_screenPtr = nullptr;
+	_config._musicFl = true;
+	_config._soundFl = true;
+	_config._turboFl = false;
+	_look = 0;
+	_take = 0;
+	_drop = 0;
+	_maze._enabledFl = false;
+	_maze._size = 0;
+	_maze._x1 = _maze._y1 = _maze._x2 = _maze._y2 = _maze._x3 = _maze._x4 = 0;
+	_maze._firstScreenIndex = 0;
+	_boot._checksum = 0;
+	_boot._registered = kRegShareware;
+	_boot._exitLen = 0;
+	_file = nullptr;
+	_scheduler = nullptr;
 }
 
 HugoEngine::~HugoEngine() {
@@ -379,10 +430,11 @@ void HugoEngine::runMachine() {
  */
 bool HugoEngine::loadHugoDat() {
 	Common::File in;
-	in.open("hugo.dat");
+	Common::String filename = "hugo.dat";
+	in.open(filename.c_str());
 
 	if (!in.isOpen()) {
-		Common::String errorMessage = "You're missing the 'hugo.dat' file. Get it from the ScummVM website";
+		Common::String errorMessage = Common::String::format(_("Unable to locate the '%s' engine data file."), filename.c_str());
 		GUIErrorMessage(errorMessage);
 		warning("%s", errorMessage.c_str());
 		return false;
@@ -393,7 +445,7 @@ bool HugoEngine::loadHugoDat() {
 	in.read(buf, 4);
 
 	if (memcmp(buf, "HUGO", 4)) {
-		Common::String errorMessage = "File 'hugo.dat' is corrupt. Get it from the ScummVM website";
+		Common::String errorMessage = Common::String::format(_("The '%s' engine data file is corrupt."), filename.c_str());
 		GUIErrorMessage(errorMessage);
 		return false;
 	}
@@ -402,7 +454,9 @@ bool HugoEngine::loadHugoDat() {
 	int minVer = in.readByte();
 
 	if ((majVer != HUGO_DAT_VER_MAJ) || (minVer != HUGO_DAT_VER_MIN)) {
-		Common::String errorMessage = Common::String::format("File 'hugo.dat' is wrong version. Expected %d.%d but got %d.%d. Get it from the ScummVM website", HUGO_DAT_VER_MAJ, HUGO_DAT_VER_MIN, majVer, minVer);
+		Common::String errorMessage = Common::String::format(
+			_("Incorrect version of the '%s' engine data file found. Expected %d.%d but got %d.%d."),
+			filename.c_str(),HUGO_DAT_VER_MAJ, HUGO_DAT_VER_MIN, majVer, minVer);
 		GUIErrorMessage(errorMessage);
 		return false;
 	}

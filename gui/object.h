@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 #ifndef GUI_OBJECT_H
@@ -24,6 +25,7 @@
 
 #include "common/scummsys.h"
 #include "common/str.h"
+#include "common/rect.h"
 
 namespace GUI {
 
@@ -59,6 +61,8 @@ class Widget;
 class GuiObject : public CommandReceiver {
 	friend class Widget;
 protected:
+	Common::Rect _textDrawableArea;
+
 	int16		_x, _y;
 	uint16		_w, _h;
 	const Common::String _name;
@@ -66,10 +70,14 @@ protected:
 	Widget		*_firstWidget;
 
 public:
-	GuiObject(int x, int y, int w, int h) : _x(x), _y(y), _w(w), _h(h), _firstWidget(0)  { }
+	GuiObject(int x, int y, int w, int h) : _x(x), _y(y), _w(w), _h(h), _firstWidget(0), _textDrawableArea(Common::Rect(0, 0, 0, 0)) { }
 	GuiObject(const Common::String &name);
 	~GuiObject();
 
+	virtual void setTextDrawableArea(const Common::Rect &r) { _textDrawableArea = r; }
+
+	virtual int16	getRelX() const		{ return _x; }
+	virtual int16	getRelY() const		{ return _y; }
 	virtual int16	getAbsX() const		{ return _x; }
 	virtual int16	getAbsY() const		{ return _y; }
 	virtual int16	getChildX() const	{ return getAbsX(); }
@@ -84,6 +92,10 @@ public:
 	virtual void	reflowLayout();
 
 	virtual void	removeWidget(Widget *widget);
+
+	virtual bool	isPointIn(int x, int y) {
+		return (x >= _x && x < (_x + _w) && (y >= _y) && (y < _y + _h));
+	}
 
 protected:
 	virtual void	releaseFocus() = 0;

@@ -8,19 +8,17 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  */
-
-
 
 #include "base/plugins.h"
 #include "common/savefile.h"
@@ -34,21 +32,12 @@ namespace Cruise {
 
 struct CRUISEGameDescription {
 	ADGameDescription desc;
-
-	int gameType;
-	uint32 features;
 };
 
 const char *CruiseEngine::getGameId() const {
-	return _gameDescription->desc.gameid;
+	return _gameDescription->desc.gameId;
 }
 
-int CruiseEngine::getGameType() const {
-	return _gameDescription->gameType;
-}
-uint32 CruiseEngine::getFeatures() const {
-	return _gameDescription->features;
-}
 Common::Language CruiseEngine::getLanguage() const {
 	return _gameDescription->desc.language;
 }
@@ -73,12 +62,10 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			"16 colors",
 			AD_ENTRY1("D1", "cd29a4cd9162076e9a18495fe56a48f3"),
 			Common::EN_GRB,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
-		GType_CRUISE,
-		0,
 	},
 	{
 		{
@@ -86,12 +73,10 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			"16 colors",
 			AD_ENTRY1("D1", "41a7a4d426dbd048eb369cfee4bb2717"),
 			Common::FR_FRA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
-		GType_CRUISE,
-		0,
 	},
 	{
 		{
@@ -99,12 +84,10 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			"256 colors",
 			AD_ENTRY1("D1", "a90d2b9ead6b4d812cd14268672cf178"),
 			Common::EN_ANY,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
-		GType_CRUISE,
-		0,
 	},
 	{
 		{
@@ -112,12 +95,10 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			"256 colors",
 			AD_ENTRY1("D1", "e258865807ea31b2d523340e6f0a606b"),
 			Common::FR_FRA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
-		GType_CRUISE,
-		0,
 	},
 	{
 		{
@@ -125,12 +106,10 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			"16 colors",
 			AD_ENTRY1("D1", "287d2ec1799e2f881dee23c70be96e81"),
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
-		GType_CRUISE,
-		0,
 	},
 	{
 		{
@@ -138,12 +117,10 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			"256 colors",
 			AD_ENTRY1("D1", "f2a26522d49983c4ae32bcccbb801b02"),
 			Common::DE_DEU,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
-		GType_CRUISE,
-		0,
 	},
 	{
 		{
@@ -155,8 +132,6 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
-		GType_CRUISE,
-		0,
 	},
 	{ // Amiga English US GOLD edition.
 		{
@@ -168,8 +143,6 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
-		GType_CRUISE,
-		0,
 	},
 	{ // Amiga Italian US GOLD edition.
 		{
@@ -181,8 +154,6 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
-		GType_CRUISE,
-		0,
 	},
 	{ // AtariST English KixxXL edition.
 		{
@@ -194,8 +165,6 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
-		GType_CRUISE,
-		0,
 	},
 	{
 		{
@@ -203,12 +172,10 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			"256 colors",
 			AD_ENTRY1("D1", "e19a4ab2e24a69087e4ea994a5506231"),
 			Common::IT_ITA,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
-		GType_CRUISE,
-		0,
 	},
 	{
 		{
@@ -216,14 +183,12 @@ static const CRUISEGameDescription gameDescriptions[] = {
 			"256 colors",
 			AD_ENTRY1("D1", "9a302ada55600d96061fda1d63a6ccda"),
 			Common::ES_ESP,
-			Common::kPlatformPC,
+			Common::kPlatformDOS,
 			ADGF_NO_FLAGS,
 			GUIO0()
 		},
-		GType_CRUISE,
-		0,
 	},
-	{AD_TABLE_END_MARKER, 0, 0}
+	{AD_TABLE_END_MARKER}
 };
 
 }
@@ -231,8 +196,8 @@ static const CRUISEGameDescription gameDescriptions[] = {
 class CruiseMetaEngine : public AdvancedMetaEngine {
 public:
 	CruiseMetaEngine() : AdvancedMetaEngine(Cruise::gameDescriptions, sizeof(Cruise::CRUISEGameDescription), cruiseGames) {
-		_singleid = "cruise";
-		_guioptions = GUIO2(GUIO_NOSPEECH, GUIO_NOMIDI);
+		_singleId = "cruise";
+		_guiOptions = GUIO2(GUIO_NOSPEECH, GUIO_NOMIDI);
 	}
 
 	virtual const char *getName() const {
@@ -263,10 +228,9 @@ bool CruiseMetaEngine::hasFeature(MetaEngineFeature f) const {
 SaveStateList CruiseMetaEngine::listSaves(const char *target) const {
 	Common::SaveFileManager *saveFileMan = g_system->getSavefileManager();
 	Common::StringArray filenames;
-	Common::String pattern("cruise.s??");
+	Common::String pattern("cruise.s##");
 
 	filenames = saveFileMan->listSavefiles(pattern);
-	sort(filenames.begin(), filenames.end());	// Sort (hopefully ensuring we are sorted numerically..)
 
 	SaveStateList saveList;
 	for (Common::StringArray::const_iterator file = filenames.begin(); file != filenames.end(); ++file) {
@@ -285,6 +249,8 @@ SaveStateList CruiseMetaEngine::listSaves(const char *target) const {
 		}
 	}
 
+	// Sort saves based on slot number.
+	Common::sort(saveList.begin(), saveList.end(), SaveStateDescriptorSlotComparator());
 	return saveList;
 }
 
@@ -295,7 +261,7 @@ void CruiseMetaEngine::removeSaveState(const char *target, int slot) const {
 SaveStateDescriptor CruiseMetaEngine::querySaveMetaInfos(const char *target, int slot) const {
 	Common::InSaveFile *f = g_system->getSavefileManager()->openForLoading(
 		Cruise::CruiseEngine::getSavegameFile(slot));
-	
+
 	if (f) {
 		Cruise::CruiseSavegameHeader header;
 		Cruise::readSavegameHeader(f, header);
@@ -321,7 +287,7 @@ bool CruiseMetaEngine::createInstance(OSystem *syst, Engine **engine, const ADGa
 
 
 #if PLUGIN_ENABLED_DYNAMIC(CRUISE)
-REGISTER_PLUGIN_DYNAMIC(CRUISE, PLUGIN_TYPE_ENGINE, CruiseMetaEngine);
+	REGISTER_PLUGIN_DYNAMIC(CRUISE, PLUGIN_TYPE_ENGINE, CruiseMetaEngine);
 #else
-REGISTER_PLUGIN_STATIC(CRUISE, PLUGIN_TYPE_ENGINE, CruiseMetaEngine);
+	REGISTER_PLUGIN_STATIC(CRUISE, PLUGIN_TYPE_ENGINE, CruiseMetaEngine);
 #endif

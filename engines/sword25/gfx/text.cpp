@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -29,10 +29,6 @@
  *
  */
 
-// TODO:
-// Entweder Fontfile absolut abspeichern, oder Verzeichniswechseln verbieten
-// Eine relative Fontfile-Angabe könnte verwandt werden nachdem das Verzeichnis bereits gewechselt wurde und die Datei würde nicht mehr gefunden
-
 #include "sword25/kernel/kernel.h"
 #include "sword25/kernel/outputpersistenceblock.h"
 #include "sword25/kernel/inputpersistenceblock.h"
@@ -45,7 +41,7 @@
 namespace Sword25 {
 
 namespace {
-const uint AUTO_WRAP_THRESHOLD_DEFAULT = 300;
+const uint32 AUTO_WRAP_THRESHOLD_DEFAULT = 300;
 }
 
 Text::Text(RenderObjectPtr<RenderObject> parentPtr) :
@@ -81,7 +77,8 @@ bool Text::setFont(const Common::String &font) {
 		return false;
 	}
 #else
-	getResourceManager()->requestResource(font);
+	Resource *pResource = getResourceManager()->requestResource(font);
+	pResource->release(); //unlock precached resource
 	_font = font;
 	updateFormat();
 	forceRefresh();
@@ -91,13 +88,15 @@ bool Text::setFont(const Common::String &font) {
 }
 
 void Text::setText(const Common::String &text) {
-	_text = text;
-	updateFormat();
-	forceRefresh();
+	if (_text != text) {
+		_text = text;
+		updateFormat();
+		forceRefresh();
+	}
 }
 
-void Text::setColor(uint modulationColor) {
-	uint newModulationColor = (modulationColor & 0x00ffffff) | (_modulationColor & 0xff000000);
+void Text::setColor(uint32 modulationColor) {
+	uint32 newModulationColor = (modulationColor & 0x00ffffff) | (_modulationColor & 0xff000000);
 	if (newModulationColor != _modulationColor) {
 		_modulationColor = newModulationColor;
 		forceRefresh();
@@ -106,7 +105,7 @@ void Text::setColor(uint modulationColor) {
 
 void Text::setAlpha(int alpha) {
 	assert(alpha >= 0 && alpha < 256);
-	uint newModulationColor = (_modulationColor & 0x00ffffff) | alpha << 24;
+	uint32 newModulationColor = (_modulationColor & 0xffffff) | (alpha << 24);
 	if (newModulationColor != _modulationColor) {
 		_modulationColor = newModulationColor;
 		forceRefresh();
@@ -121,7 +120,7 @@ void Text::setAutoWrap(bool autoWrap) {
 	}
 }
 
-void Text::setAutoWrapThreshold(uint autoWrapThreshold) {
+void Text::setAutoWrapThreshold(uint32 autoWrapThreshold) {
 	if (autoWrapThreshold != _autoWrapThreshold) {
 		_autoWrapThreshold = autoWrapThreshold;
 		updateFormat();
@@ -129,13 +128,13 @@ void Text::setAutoWrapThreshold(uint autoWrapThreshold) {
 	}
 }
 
-bool Text::doRender() {
-	// Font-Resource locken.
+bool Text::doRender(RectangleList *updateRects) {
+	// lock Font Resource
 	FontResource *fontPtr = lockFontResource();
 	if (!fontPtr)
 		return false;
 
-	// Charactermap-Resource locken.
+	// lock Character map resource
 	ResourceManager *rmPtr = getResourceManager();
 	BitmapResource *charMapPtr;
 	{
@@ -152,18 +151,18 @@ bool Text::doRender() {
 		charMapPtr = static_cast<BitmapResource *>(pResource);
 	}
 
-	// Framebufferobjekt holen.
+	// Getting frame buffer object
 	GraphicEngine *gfxPtr = Kernel::getInstance()->getGfx();
 	assert(gfxPtr);
 
 	bool result = true;
 	Common::Array<Line>::iterator iter = _lines.begin();
 	for (; iter != _lines.end(); ++iter) {
-		// Feststellen, ob überhaupt Buchstaben der aktuellen Zeile vom Update betroffen sind.
+		// Determine whether any letters of the current line are affected by the update.
 		Common::Rect checkRect = (*iter).bbox;
 		checkRect.translate(_absoluteX, _absoluteY);
 
-		// Jeden Buchstaben einzeln Rendern.
+		// Render each letter individually.
 		int curX = _absoluteX + (*iter).bbox.left;
 		int curY = _absoluteY + (*iter).bbox.top;
 		for (uint i = 0; i < (*iter).text.size(); ++i) {
@@ -171,7 +170,7 @@ bool Text::doRender() {
 
 			Common::Rect renderRect(curX, curY, curX + curRect.width(), curY + curRect.height());
 			renderRect.translate(curRect.left - curX, curRect.top - curY);
-			result = charMapPtr->blit(curX, curY, Image::FLIP_NONE, &renderRect, _modulationColor);
+			result = charMapPtr->blit(curX, curY, Graphics::FLIP_NONE, &renderRect, _modulationColor, -1, -1, updateRects);
 			if (!result)
 				break;
 
@@ -179,24 +178,24 @@ bool Text::doRender() {
 		}
 	}
 
-	// Charactermap-Resource freigeben.
+	// Free Character map resource
 	charMapPtr->release();
 
-	// Font-Resource freigeben.
+	// Free Font resource
 	fontPtr->release();
 
 	return result;
 }
 
 ResourceManager *Text::getResourceManager() {
-	// Pointer auf den Resource-Manager holen.
+	// Getting pointer to resource manager
 	return Kernel::getInstance()->getResourceManager();
 }
 
 FontResource *Text::lockFontResource() {
 	ResourceManager *rmPtr = getResourceManager();
 
-	// Font-Resource locken.
+	// Lock font resource
 	FontResource *fontPtr;
 	{
 		Resource *resourcePtr = rmPtr->requestResource(_font);
@@ -276,7 +275,7 @@ void Text::updateFormat() {
 			i = lastSpace;
 		}
 
-		// Bounding-Box der einzelnen Zeilen relativ zur ersten festlegen (vor allem zentrieren).
+		// Bounding box of each line relative to the first set (center aligned).
 		_height = 0;
 		Common::Array<Line>::iterator iter = _lines.begin();
 		for (; iter != _lines.end(); ++iter) {
@@ -288,7 +287,7 @@ void Text::updateFormat() {
 			_height += bbox.height();
 		}
 	} else {
-		// Keine automatische Formatierung, also wird der gesamte Text in nur eine Zeile kopiert.
+		// No auto format, so all the text is copied to a single line.
 		_lines[0].text = _text;
 		_lines[0].bbox = Common::Rect(0, 0, _width, _height);
 	}
@@ -331,11 +330,11 @@ bool Text::unpersist(InputPersistenceBlock &reader) {
 
 	result &= RenderObject::unpersist(reader);
 
-	// Farbe und Alpha einlesen.
+	// Read color and alpha
 	reader.read(_modulationColor);
 
-	// Beim Laden der anderen Member werden die Set-Methoden benutzt statt der tatsächlichen Member.
-	// So wird das Layout automatisch aktualisiert und auch alle anderen notwendigen Methoden ausgeführt.
+	// Run all methods on loading relevant members.
+	// So, the layout is automatically updated and all necessary logic is executed.
 
 	Common::String font;
 	reader.readString(font);
@@ -349,7 +348,7 @@ bool Text::unpersist(InputPersistenceBlock &reader) {
 	reader.read(autoWrap);
 	setAutoWrap(autoWrap);
 
-	uint autoWrapThreshold;
+	uint32 autoWrapThreshold;
 	reader.read(autoWrapThreshold);
 	setAutoWrapThreshold(autoWrapThreshold);
 

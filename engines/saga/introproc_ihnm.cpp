@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -68,7 +68,7 @@ int Scene::IHNMStartProc() {
 				// Play the title music
 				_vm->_music->play(1, MUSIC_NORMAL);
 				// Play title screen
-				playTitle(2, 17);
+				playTitle(2, _vm->_music->isAdlib() ? 20 : 27);
 			}
 		}
 	} else {
@@ -150,7 +150,7 @@ bool Scene::checkKey() {
 			break;
 		case Common::EVENT_KEYDOWN:
 			// Don't react to modifier keys alone. The original did
-			// non, and the user may want to change scaler without
+			// not, and the user may want to change scaler without
 			// terminating the intro.
 			if (event.kbd.ascii)
 				res = true;
@@ -212,7 +212,7 @@ bool Scene::playTitle(int title, int time, int mode) {
 			break;
 
 		case 2: // display background
-			_vm->_system->copyRectToScreen(backBufferSurface->pixels, backBufferSurface->w, 0, 0,
+			_vm->_system->copyRectToScreen(backBufferSurface->getPixels(), backBufferSurface->w, 0, 0,
 							  backBufferSurface->w, backBufferSurface->h);
 			phase++;
 			startTime = curTime;
@@ -247,7 +247,7 @@ bool Scene::playTitle(int title, int time, int mode) {
 
 					frameTime = curTime;
 
-					_vm->_system->copyRectToScreen(backBufferSurface->pixels, backBufferSurface->w, 0, 0,
+					_vm->_system->copyRectToScreen(backBufferSurface->getPixels(), backBufferSurface->w, 0, 0,
 							  backBufferSurface->w, backBufferSurface->h);
 				}
 
@@ -273,8 +273,8 @@ bool Scene::playTitle(int title, int time, int mode) {
 
 	_vm->_anim->endVideo();
 
-	memset((byte *)backBufferSurface->pixels, 0,  backBufferSurface->w *  backBufferSurface->h);
-	_vm->_system->copyRectToScreen(backBufferSurface->pixels, backBufferSurface->w, 0, 0,
+	memset((byte *)backBufferSurface->getPixels(), 0,  backBufferSurface->w *  backBufferSurface->h);
+	_vm->_system->copyRectToScreen(backBufferSurface->getPixels(), backBufferSurface->w, 0, 0,
 							  backBufferSurface->w, backBufferSurface->h);
 
 	return interrupted;

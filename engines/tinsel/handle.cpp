@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -30,6 +30,7 @@
 #include "tinsel/dw.h"
 #include "tinsel/handle.h"
 #include "tinsel/heapmem.h"			// heap memory manager
+#include "tinsel/scn.h"		// for the DW1 Mac resource handler
 #include "tinsel/timers.h"	// for DwGetCurrentTime()
 #include "tinsel/tinsel.h"
 #include "tinsel/scene.h"
@@ -84,7 +85,6 @@ static char g_szCdPlayFile[100];
 //----------------- FORWARD REFERENCES --------------------
 
 static void LoadFile(MEMHANDLE *pH);	// load a memory block as a file
-
 
 /**
  * Loads the graphics handle table index file and preloads all the
@@ -258,7 +258,7 @@ void LoadExtraGraphData(SCNHANDLE start, SCNHANDLE next) {
 }
 
 void SetCdPlaySceneDetails(int fileNum, const char *fileName) {
-	strcpy(g_szCdPlayFile, fileName);
+	Common::strlcpy(g_szCdPlayFile, fileName, 100);
 }
 
 void SetCdPlayHandle(int fileNum) {
@@ -322,6 +322,7 @@ void LoadFile(MEMHANDLE *pH) {
  */
 byte *LockMem(SCNHANDLE offset) {
 	uint32 handle = offset >> SCNHANDLE_SHIFT;	// calc memory handle to use
+	//debug("Locking offset of type %d (%x), offset %d, handle %d", (offset & HANDLEMASK) >> SCNHANDLE_SHIFT, (offset & HANDLEMASK) >> SCNHANDLE_SHIFT, offset & OFFSETMASK, handle);
 	MEMHANDLE *pH;			// points to table entry
 
 	// range check the memory handle

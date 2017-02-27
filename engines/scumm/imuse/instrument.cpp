@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
  */
 
 
@@ -278,6 +279,21 @@ private:
 	byte _instrument[23];
 };
 
+class Instrument_MacSfx : public InstrumentInternal {
+private:
+	byte _program;
+
+public:
+	Instrument_MacSfx(byte program);
+	Instrument_MacSfx(Serializer *s);
+	void saveOrLoad(Serializer *s);
+	void send(MidiChannel *mc);
+	void copy_to(Instrument *dest) { dest->macSfx(_program); }
+	bool is_valid() {
+		return (_program < 128);
+	}
+};
+
 ////////////////////////////////////////
 //
 // Instrument class members
@@ -326,6 +342,14 @@ void Instrument::pcspk(const byte *instrument) {
 	_instrument = new Instrument_PcSpk(instrument);
 }
 
+void Instrument::macSfx(byte prog) {
+	clear();
+	if (prog > 127)
+		return;
+	_type = itMacSfx;
+	_instrument = new Instrument_MacSfx(prog);
+}
+
 void Instrument::saveOrLoad(Serializer *s) {
 	if (s->isSaving()) {
 		s->saveByte(_type);
@@ -349,6 +373,9 @@ void Instrument::saveOrLoad(Serializer *s) {
 		case itPcSpk:
 			_instrument = new Instrument_PcSpk(s);
 			break;
+		case itMacSfx:
+			_instrument = new Instrument_MacSfx(s);
+			break;
 		default:
 			warning("No known instrument classification #%d", (int)_type);
 			_type = itNone;
@@ -371,6 +398,7 @@ Instrument_Program::Instrument_Program(byte program, bool mt32) :
 
 Instrument_Program::Instrument_Program(Serializer *s) {
 	_program = 255;
+	_mt32 = false;
 	if (!s->isSaving())
 		saveOrLoad(s);
 }
@@ -528,4 +556,38 @@ void Instrument_PcSpk::send(MidiChannel *mc) {
 	mc->sysEx_customInstrument('SPK ', (byte *)&_instrument);
 }
 
+////////////////////////////////////////
+//
+// Instrument_MacSfx class members
+//
+////////////////////////////////////////
+
+Instrument_MacSfx::Instrument_MacSfx(byte program) :
+	_program(program) {
+	if (program > 127) {
+		_program = 255;
+	}
+}
+
+Instrument_MacSfx::Instrument_MacSfx(Serializer *s) {
+	_program = 255;
+	if (!s->isSaving()) {
+		saveOrLoad(s);
+	}
+}
+
+void Instrument_MacSfx::saveOrLoad(Serializer *s) {
+	if (s->isSaving()) {
+		s->saveByte(_program);
+	} else {
+		_program = s->loadByte();
+	}
+}
+
+void Instrument_MacSfx::send(MidiChannel *mc) {
+	if (_program > 127) {
+		return;
+	}
+	mc->sysEx_customInstrument('MAC ', &_program);
+}
 } // End of namespace Scumm

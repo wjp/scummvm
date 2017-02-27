@@ -2,7 +2,6 @@ MODULE := common
 
 MODULE_OBJS := \
 	archive.o \
-	config-file.o \
 	config-manager.o \
 	coroutines.o \
 	dcl.o \
@@ -10,19 +9,21 @@ MODULE_OBJS := \
 	error.o \
 	EventDispatcher.o \
 	EventMapper.o \
-	EventRecorder.o \
 	file.o \
 	fs.o \
 	gui_options.o \
 	hashmap.o \
 	iff_container.o \
+	ini-file.o \
 	installshield_cab.o \
+	json.o \
 	language.o \
 	localization.o \
 	macresman.o \
 	memorypool.o \
 	md5.o \
 	mutex.o \
+	osd_message_queue.o \
 	platform.o \
 	quicktime.o \
 	random.o \
@@ -36,6 +37,7 @@ MODULE_OBJS := \
 	translation.o \
 	unarj.o \
 	unzip.o \
+	ustr.o \
 	util.o \
 	winexe.o \
 	winexe_ne.o \
@@ -50,6 +52,16 @@ MODULE_OBJS += \
 	huffman.o \
 	rdft.o \
 	sinetables.o
+
+ifdef ENABLE_EVENTRECORDER
+MODULE_OBJS += \
+	recorderfile.o
+endif
+
+ifdef USE_UPDATES
+MODULE_OBJS += \
+	updates.o
+endif
 
 # Include common rules
 include $(srcdir)/rules.mk

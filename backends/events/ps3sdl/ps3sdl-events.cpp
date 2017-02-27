@@ -8,12 +8,12 @@
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -60,11 +60,11 @@ bool PS3SdlEventSource::handleJoyButtonDown(SDL_Event &ev, Common::Event &event)
 	switch (ev.jbutton.button) {
 	case BTN_CROSS: // Left mouse button
 		event.type = Common::EVENT_LBUTTONDOWN;
-		processMouseEvent(event, _km.x, _km.y);
+		processMouseEvent(event, _km.x / MULTIPLIER, _km.y / MULTIPLIER);
 		break;
 	case BTN_CIRCLE: // Right mouse button
 		event.type = Common::EVENT_RBUTTONDOWN;
-		processMouseEvent(event, _km.x, _km.y);
+		processMouseEvent(event, _km.x / MULTIPLIER, _km.y / MULTIPLIER);
 		break;
 	case BTN_TRIANGLE: // Game menu
 		event.type = Common::EVENT_KEYDOWN;
@@ -72,9 +72,9 @@ bool PS3SdlEventSource::handleJoyButtonDown(SDL_Event &ev, Common::Event &event)
 		event.kbd.ascii = mapKey(SDLK_F5, (SDLMod) ev.key.keysym.mod, 0);
 		break;
 	case BTN_SELECT: // Virtual keyboard
-		event.type = Common::EVENT_KEYDOWN;
-		event.kbd.keycode = Common::KEYCODE_F7;
-		event.kbd.ascii = mapKey(SDLK_F7, (SDLMod) ev.key.keysym.mod, 0);
+#ifdef ENABLE_VKEYBD
+		event.type = Common::EVENT_VIRTUAL_KEYBOARD;
+#endif
 		break;
 	case BTN_SQUARE: // Escape
 		event.type = Common::EVENT_KEYDOWN;
@@ -98,11 +98,11 @@ bool PS3SdlEventSource::handleJoyButtonUp(SDL_Event &ev, Common::Event &event) {
 	switch (ev.jbutton.button) {
 	case BTN_CROSS: // Left mouse button
 		event.type = Common::EVENT_LBUTTONUP;
-		processMouseEvent(event, _km.x, _km.y);
+		processMouseEvent(event, _km.x / MULTIPLIER, _km.y / MULTIPLIER);
 		break;
 	case BTN_CIRCLE: // Right mouse button
 		event.type = Common::EVENT_RBUTTONUP;
-		processMouseEvent(event, _km.x, _km.y);
+		processMouseEvent(event, _km.x / MULTIPLIER, _km.y / MULTIPLIER);
 		break;
 	case BTN_TRIANGLE: // Game menu
 		event.type = Common::EVENT_KEYUP;
@@ -110,9 +110,7 @@ bool PS3SdlEventSource::handleJoyButtonUp(SDL_Event &ev, Common::Event &event) {
 		event.kbd.ascii = mapKey(SDLK_F5, (SDLMod) ev.key.keysym.mod, 0);
 		break;
 	case BTN_SELECT: // Virtual keyboard
-		event.type = Common::EVENT_KEYUP;
-		event.kbd.keycode = Common::KEYCODE_F7;
-		event.kbd.ascii = mapKey(SDLK_F7, (SDLMod) ev.key.keysym.mod, 0);
+		// Handled in key down
 		break;
 	case BTN_SQUARE: // Escape
 		event.type = Common::EVENT_KEYUP;
@@ -128,8 +126,8 @@ bool PS3SdlEventSource::handleJoyButtonUp(SDL_Event &ev, Common::Event &event) {
  * This pauses execution and keeps redrawing the screen until the XMB is closed.
  */
 void PS3SdlEventSource::preprocessEvents(SDL_Event *event) {
-	if (event->type == SDL_ACTIVEEVENT) {
-		if (event->active.state == SDL_APPMOUSEFOCUS && !event->active.gain) {
+	if (event->type == SDL_WINDOWEVENT) {
+		if (event->window.event == SDL_WINDOWEVENT_LEAVE) {
 			// XMB opened
 			if (g_engine)
 				g_engine->pauseEngine(true);
@@ -147,9 +145,9 @@ void PS3SdlEventSource::preprocessEvents(SDL_Event *event) {
 				}
 				if (event->type == SDL_QUIT)
 					return;
-				if (event->type != SDL_ACTIVEEVENT)
+				if (event->type != SDL_WINDOWEVENT)
 					continue;
-				if (event->active.state == SDL_APPMOUSEFOCUS && event->active.gain) {
+				if (event->window.event == SDL_WINDOWEVENT_ENTER) {
 					// XMB closed
 					if (g_engine)
 						g_engine->pauseEngine(false);
