@@ -205,6 +205,8 @@ void CVideoSurface::transBlitRect(const Rect &srcRect, const Rect &destRect, CVi
 		if (src->lock()) {
 			Graphics::ManagedSurface *srcSurface = src->_rawSurface;
 			Graphics::ManagedSurface *destSurface = _rawSurface;
+//	debug("src: %s, dst: %s", srcSurface->format.toString().c_str(), destSurface->format.toString().c_str());
+//debug("rgb shift: %d, %d, %d, rgb loss: %d, %d, %d", srcSurface->format.rShift, srcSurface->format.gShift, srcSurface->format.bShift, srcSurface->format.rLoss, srcSurface->format.gLoss, srcSurface->format.bLoss);
 			Graphics::Surface destArea = destSurface->getSubArea(destRect);
 
 			const uint16 *srcPtr = (const uint16 *)srcSurface->getBasePtr(
@@ -222,16 +224,70 @@ void CVideoSurface::transBlitRect(const Rect &srcRect, const Rect &destRect, CVi
 				transSurface.setRow(flipFlag ? srcRect.top + yCtr : srcRect.bottom - yCtr - 1);
 				transSurface.setCol(srcRect.left);
 
+		if (isAlpha) {
+
 				for (int srcX = srcRect.left; srcX < srcRect.right; ++srcX) {
 					if (transSurface.isPixelOpaque())
 						*lineDestP = *lineSrcP;
-					else if (!transSurface.isPixelTransparent())
-						copyPixel(lineDestP, lineSrcP, transSurface.getAlpha() >> 3, srcSurface->format, isAlpha);
+					else if (!transSurface.isPixelTransparent()) {
+						byte alpha = transSurface.getAlpha() >> 3;
+						const uint16 *srcP = lineSrcP;
+						uint16 *destP = lineDestP;
+						byte r, g, b;
+						r = (*srcP >> 11) & 31;
+						g = (*srcP >> 6) & 31;
+						b = (*srcP >> 0) & 31;
+						r = ((31 - alpha) * r) / 31; // _palette1[31 - alpha][r];
+						g = ((31 - alpha) * g) / 31; // _palette1[31 - alpha][g];
+						b = ((31 - alpha) * b) / 31; // _palette1[31 - alpha][b];
 
+						byte r2, g2, b2;
+						r2 = (*destP >> 11) & 31;
+						g2 = (*destP >> 6) & 31;
+						b2 = (*destP >> 0) & 31;
+						r2 = (alpha * r2) / 31; // _palette1[alpha][r2];
+						g2 = (alpha * g2) / 31; // _palette1[alpha][g2];
+						b2 = (alpha * b2) / 31; // _palette1[alpha][b2];
+
+						*destP = ((r + r2) << 11) + ((g + g2) << 6) + (b + b2);
+//						copyPixel(lineDestP, lineSrcP, transSurface.getAlpha() >> 3, srcSurface->format, isAlpha);
+					}
 					++lineSrcP;
 					++lineDestP;
 					transSurface.moveX();
 				}
+
+		} else {
+				for (int srcX = srcRect.left; srcX < srcRect.right; ++srcX) {
+					if (transSurface.isPixelOpaque())
+						*lineDestP = *lineSrcP;
+					else if (!transSurface.isPixelTransparent()) {
+						byte alpha = transSurface.getAlpha() >> 3;
+						const uint16 *srcP = lineSrcP;
+						uint16 *destP = lineDestP;
+						byte r, g, b;
+						r = (*srcP >> 11) & 31;
+						g = (*srcP >> 6) & 31;
+						b = (*srcP >> 0) & 31;
+
+						byte r2, g2, b2;
+						r2 = (*destP >> 11) & 31;
+						g2 = (*destP >> 6) & 31;
+						b2 = (*destP >> 0) & 31;
+						r2 = (alpha * r2) / 31; // _palette1[alpha][r2];
+						g2 = (alpha * g2) / 31; // _palette1[alpha][g2];
+						b2 = (alpha * b2) / 31; // _palette1[alpha][b2];
+
+						*destP = ((r + r2) << 11) + ((g + g2) << 6) + (b + b2);
+//						copyPixel(lineDestP, lineSrcP, transSurface.getAlpha() >> 3, srcSurface->format, isAlpha);
+					}
+					++lineSrcP;
+					++lineDestP;
+					transSurface.moveX();
+				}
+
+
+		}
 
 				// Move to next line
 				srcPtr = flipFlag ? srcPtr + (src->getPitch() / 2) :
@@ -270,28 +326,44 @@ void CVideoSurface::copyPixel(uint16 *destP, const uint16 *srcP, byte alpha,
 
 	// Get the source color
 	byte r, g, b;
+#if 0
 	srcFormat.colorToRGB(*srcP, r, g, b);
 	r >>= RGB_SHIFT;
 	g >>= RGB_SHIFT;
 	b >>= RGB_SHIFT;
+#else
+	r = (*srcP >> 11) & 31;
+	g = (*srcP >> 6) & 31;
+	b = (*srcP >> 0) & 31;
+#endif
 
 	if (isAlpha) {
-		r = _palette1[31 - alpha][r];
-		g = _palette1[31 - alpha][g];
-		b = _palette1[31 - alpha][b];
+		r = ((31 - alpha) * r) / 31; // _palette1[31 - alpha][r];
+		g = ((31 - alpha) * g) / 31; // _palette1[31 - alpha][g];
+		b = ((31 - alpha) * b) / 31; // _palette1[31 - alpha][b];
 	}
 
 	byte r2, g2, b2;
-	destFormat.colorToRGB(*destP, r2, g2, b2);
+#if 0
+	srcFormat.colorToRGB(*destP, r2, g2, b2);
 	r2 >>= RGB_SHIFT;
 	g2 >>= RGB_SHIFT;
 	b2 >>= RGB_SHIFT;
-	r2 = _palette1[alpha][r2];
-	g2 = _palette1[alpha][g2];
-	b2 = _palette1[alpha][b2];
+#else
+	r2 = (*destP >> 11) & 31;
+	g2 = (*destP >> 6) & 31;
+	b2 = (*destP >> 0) & 31;
+#endif
+	r2 = (alpha * r2) / 31; // _palette1[alpha][r2];
+	g2 = (alpha * g2) / 31; // _palette1[alpha][g2];
+	b2 = (alpha * b2) / 31; // _palette1[alpha][b2];
 
+#if 0
 	*destP = destFormat.RGBToColor((r + r2) << RGB_SHIFT,
 		(g + g2) << RGB_SHIFT, (b + b2) << RGB_SHIFT);
+#else
+	*destP = ((r + r2) << 11) + ((g + g2) << 6) + (b + b2);
+#endif
 }
 
 /*------------------------------------------------------------------------*/
