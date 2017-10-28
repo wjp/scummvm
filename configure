@@ -2918,6 +2918,9 @@ if test -n "$_host"; then
 			_port_mk="backends/platform/dingux/dingux.mk"
 			;;
 		raspberrypi)
+			_sdlpath="$RPI_ROOT/usr/bin"
+			_freetypepath="$RPI_ROOT/usr/bin"
+			_libcurlpath="$RPI_ROOT/usr/bin"
 			# This is needed because the official cross compiler doesn't have multiarch enabled
 			# but Raspbian does.
 			# Be careful as it's the linker (LDFLAGS) which must know about sysroot.
