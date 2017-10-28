@@ -1798,6 +1798,17 @@ webos)
 	;;
 esac
 
+case $_host in
+raspberrypi)
+	if test -z "$RPI_ROOT"; then
+		echo "Please set RPI_ROOT in your environment. export RPI_ROOT=<path to raspberrypi sysroot>"
+		exit 1
+	fi
+	;;
+*)
+	;;
+esac
+
 #
 # Determine the C++ compiler
 #
