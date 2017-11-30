@@ -788,8 +788,10 @@ int16 GfxPalette::kernelPalVaryReverse(int16 ticks, uint16 stepStop, int16 direc
 	_palVaryStepStop = stepStop;
 	_palVaryDirection = direction != -1 ? -direction : -_palVaryDirection;
 
-	if (!_palVaryTicks) {
+	if (!_palVaryTicks)
 		_palVaryDirection = _palVaryStepStop - _palVaryStep;
+
+	if (!_palVaryTicks && !_palVaryPaused) {
 		// see palVaryInit above, we fix the code here as well
 		//  just in case
 		palVaryProcess(1, true);
